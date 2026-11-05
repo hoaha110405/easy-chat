@@ -1,0 +1,19 @@
+{
+  "app_id": "360846524940903967",
+  "sender": { "id": "246845883529197922" },
+  "recipient": { "id": "388613280878808645" },
+  "event_name": "user_send_image",
+  "message": {
+    "msg_id": "fixture-image-001",
+    "attachments": [
+      {
+        "type": "image",
+        "payload": {
+          "thumbnail": "https://example.com/thumbnail.jpg",
+          "url": "https://example.com/image.jpg"
+        }
+      }
+    ]
+  },
+  "timestamp": "1783296002000"
+}

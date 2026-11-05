@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  REAUTH_REQUIRED
+  DISCONNECTED
+}
+
+enum MessageDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum MessageSource {
+  WEBHOOK
+  HISTORY
+  PERSONAL
+  FACEBOOK
+}
+
+enum EventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+model ZaloConnection {
+  id                    String           @id @default(cuid())
+  oaId                  String           @unique
+  oaName                String
+  avatarUrl             String?
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  tokenExpiresAt        DateTime
+  status                ConnectionStatus @default(CONNECTED)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  conversations         Conversation[]
+  messages              Message[]
+}
+
+model Conversation {
+  id                     String          @id @default(cuid())
+  connectionId           String?
+  channelAccountId       String?
+  externalThreadType     String          @default("USER")
+  externalUserId         String
+  customerName           String?
+  customerAvatar         String?
+  externalConversationId String?
+  lastInboundAt          DateTime?
+  lastSyncAt             DateTime?
+  syncCursor             String?
+  syncComplete           Boolean         @default(false)
+  lastMessageAt          DateTime?
+  lastMessagePreview     String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  channelAccount         ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  connection             ZaloConnection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  messages               Message[]
+
+  @@unique([connectionId, externalUserId])
+  @@unique([channelAccountId, externalUserId, externalThreadType])
+  @@index([lastMessageAt, id])
+  @@index([channelAccountId, externalConversationId])
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  connectionId      String?
+  channelAccountId  String?
+  externalSenderId  String?
+  deliveryStatus    DeliveryStatus   @default(SENT)
+  idempotencyKey    String?
+  deliveryError     String?
+  sendAttempts      Int              @default(0)
+  sendingAt         DateTime?
+  conversationId    String
+  externalMessageId String?
+  direction         MessageDirection
+  type              String
+  content           String
+  metadata          Json
+  source            MessageSource    @default(WEBHOOK)
+  sentAt            DateTime
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  createdAt         DateTime         @default(now())
+  conversation      Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  channelAccount    ChannelAccount?  @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  outboundCommand   PersonalCommand?
+  connection        ZaloConnection?  @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, externalMessageId])
+  @@unique([channelAccountId, externalMessageId])
+  @@unique([channelAccountId, idempotencyKey])
+  @@index([conversationId, sentAt, id])
+  @@index([channelAccountId, deliveryStatus])
+}
+
+// Durable browser sessions also hold short-lived, single-use OAuth state and PKCE.
+model AdminSession {
+  id                         String    @id
+  expiresAt                  DateTime
+  oauthStateHash             String?
+  encryptedVerifier          String?
+  oauthExpiresAt             DateTime?
+  facebookStateHash          String?
+  facebookStateExpiresAt     DateTime?
+  encryptedFacebookSelection String?
+  facebookSelectionExpiresAt DateTime?
+
+  @@index([expiresAt])
+}
+
+// A receipt is committed before processing; failures remain visible and replayable.
+model WebhookEvent {
+  id               String          @id @default(cuid())
+  digest           String          @unique
+  oaId             String?
+  eventName        String
+  channelAccountId String?
+  channelAccount   ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  payload          Json
+  status           EventStatus     @default(RECEIVED)
+  error            String?
+  attempts         Int             @default(0)
+  receivedAt       DateTime        @default(now())
+  processedAt      DateTime?
+
+  @@index([status, receivedAt])
+}
+
+enum PersonalConnectionStatus {
+  DISCONNECTED
+  QR_PENDING
+  CONNECTING
+  CONNECTED
+  RECONNECTING
+  REAUTH_REQUIRED
+  ERROR
+  UNSUPPORTED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  UNKNOWN
+}
+
+enum PersonalCommandKind {
+  LOGIN_QR
+  SEND
+  SYNC
+  SYNC_MESSAGES
+}
+
+enum CommandStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model ChannelAccount {
+  id                   String                   @id @default(cuid())
+  ownerId              String
+  channelType          String                   @default("ZALO_PERSONAL")
+  name                 String                   @default("Zalo Personal")
+  avatarUrl            String?
+  externalAccountId    String?
+  connectionStatus     PersonalConnectionStatus @default(DISCONNECTED)
+  encryptedCredentials String?
+  encryptedQr          String?
+  qrStatus             String                   @default("NONE")
+  qrExpiresAt          DateTime?
+  generation           Int                      @default(0)
+  lastConnectedAt      DateTime?
+  lastSendAt           DateTime?
+  lastError            String?
+  lastSyncAt           DateTime?
+  lastSyncError        String?
+  syncCursor           String?
+  syncComplete         Boolean                  @default(false)
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  conversations        Conversation[]
+  messages             Message[]
+  commands             PersonalCommand[]
+  events               WebhookEvent[]
+
+  @@unique([ownerId, channelType, externalAccountId])
+  @@index([channelType, externalAccountId])
+  @@index([ownerId, createdAt])
+}
+
+// Only references and dispatch state; never contains Zalo credentials or message copies.
+model PersonalCommand {
+  id               String              @id @default(cuid())
+  channelAccountId String
+  channelAccount   ChannelAccount      @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  messageId        String?             @unique
+  message          Message?            @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  kind             PersonalCommandKind
+  status           CommandStatus       @default(PENDING)
+  generation       Int
+  deduplicationKey String              @unique
+  attempts         Int                 @default(0)
+  payload          Json                @default("{}")
+  availableAt      DateTime            @default(now())
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([status, availableAt, createdAt])
+  @@index([channelAccountId, status])
+}
+
+// One deployment-wide worker; PostgreSQL advisory lock is the authority.
+model PersonalWorkerState {
+  id          String   @id
+  instanceId  String
+  heartbeatAt DateTime
+}

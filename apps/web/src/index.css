@@ -1,0 +1,111 @@
+@import 'tailwindcss';
+@theme inline {
+  --color-background: #f5f7f8;
+  --color-foreground: #1c2b33;
+  --color-card: #ffffff;
+  --color-card-foreground: #192b3a;
+  --color-primary: #0f766e;
+  --color-primary-foreground: #ffffff;
+  --color-muted: #f1f5f5;
+  --color-muted-foreground: #657580;
+  --color-border: #e5ebed;
+  --color-input: #dce3ec;
+  --color-ring: #5eb4a9;
+  --color-destructive: #c63f42;
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    margin: 0;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  button,
+  a,
+  input {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled),
+  a {
+    cursor: pointer;
+  }
+  ::selection {
+    background: #ccfbf1;
+    color: #134e4a;
+  }
+}
+.connection-hero {
+  background:
+    radial-gradient(ellipse at 85% 40%, #d8f2eb 0%, transparent 48%),
+    linear-gradient(110deg, #f0faf7, #f6fbfa);
+}
+.chat-canvas {
+  background-color: #f7f9fa;
+  background-image: radial-gradient(#cbd5dc55 0.65px, transparent 0.65px);
+  background-size: 18px 18px;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4dddf transparent;
+}
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #64748b;
+}
+.connection-art {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 18px;
+  padding: 30px 0 30px 20px;
+}
+.art-bubble {
+  display: grid;
+  place-items: center;
+  width: 90px;
+  height: 90px;
+  border: 1px solid #dce5f5;
+  border-radius: 26px 26px 8px 26px;
+  background: white;
+  box-shadow: 0 12px 30px #5673a310;
+  transform: rotate(-7deg);
+}
+.art-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b7c9e8;
+  box-shadow: 12px 0 0 #b7c9e8;
+  margin-right: 12px;
+}
+.art-inbox {
+  display: grid;
+  place-items: center;
+  width: 70px;
+  height: 70px;
+  border: 1px solid #dce5f5;
+  border-radius: 22px;
+  background: #f9fbff;
+  transform: rotate(8deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

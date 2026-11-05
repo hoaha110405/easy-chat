@@ -1,0 +1,12 @@
+{
+  "app_id": "360846524940903967",
+  "sender": { "id": "246845883529197922" },
+  "user_id_by_app": "552177279717587730",
+  "recipient": { "id": "388613280878808645" },
+  "event_name": "user_send_text",
+  "message": {
+    "text": "Hello from a test fixture",
+    "msg_id": "fixture-incoming-001"
+  },
+  "timestamp": "1783296000000"
+}

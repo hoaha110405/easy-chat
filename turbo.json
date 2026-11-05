@@ -1,0 +1,67 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": ["VITE_API_BASE_URL"],
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "env": [
+        "NODE_ENV",
+        "PORT",
+        "DATABASE_URL",
+        "FRONTEND_URL",
+        "ZALO_APP_ID",
+        "ZALO_APP_SECRET",
+        "ZALO_REDIRECT_URI",
+        "ZALO_OA_SECRET_KEY",
+        "TOKEN_ENCRYPTION_KEY",
+        "ADMIN_PASSWORD",
+        "SESSION_SECRET",
+        "VITE_API_BASE_URL",
+        "API_PROXY_TARGET",
+        "DEV_ALLOWED_HOSTS",
+        "ZALO_PERSONAL_ENABLED",
+        "ZALO_PERSONAL_SEND_MAX_ATTEMPTS",
+        "ZALO_PERSONAL_SEND_INTERVAL_MS"
+      ],
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "cache": false
+    },
+    "worker:dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "NODE_ENV",
+        "PORT",
+        "DATABASE_URL",
+        "FRONTEND_URL",
+        "ZALO_APP_ID",
+        "ZALO_APP_SECRET",
+        "ZALO_REDIRECT_URI",
+        "ZALO_OA_SECRET_KEY",
+        "TOKEN_ENCRYPTION_KEY",
+        "ADMIN_PASSWORD",
+        "SESSION_SECRET",
+        "VITE_API_BASE_URL",
+        "API_PROXY_TARGET",
+        "DEV_ALLOWED_HOSTS",
+        "ZALO_PERSONAL_ENABLED",
+        "ZALO_PERSONAL_SEND_MAX_ATTEMPTS",
+        "ZALO_PERSONAL_SEND_INTERVAL_MS"
+      ]
+    }
+  }
+}

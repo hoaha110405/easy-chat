@@ -1,0 +1,11 @@
+{
+  "app_id": "360846524940903967",
+  "sender": { "id": "388613280878808645", "admin_id": "4267886274574868951" },
+  "recipient": { "id": "246845883529197922" },
+  "event_name": "oa_send_text",
+  "message": {
+    "text": "Reply from a test fixture",
+    "msg_id": "fixture-outgoing-001"
+  },
+  "timestamp": "1783296001000"
+}

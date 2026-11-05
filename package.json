@@ -1,0 +1,37 @@
+{
+  "name": "zalo-oa-inbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev worker:dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:integration": "pnpm --filter @zalo/api test:integration",
+    "dev:api": "pnpm --filter @zalo/shared build && pnpm --filter @zalo/api dev",
+    "dev:web": "pnpm --filter @zalo/shared build && pnpm --filter @zalo/web dev",
+    "db:generate": "pnpm --filter @zalo/api db:generate",
+    "db:migrate": "pnpm --filter @zalo/api db:migrate",
+    "db:deploy": "pnpm --filter @zalo/api db:deploy",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "env:init": "node scripts/init-env.mjs",
+    "dev:worker": "pnpm --filter @zalo/shared build && pnpm --filter @zalo/api worker:dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^22.19.0",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "turbo": "^2.6.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0"
+  }
+}

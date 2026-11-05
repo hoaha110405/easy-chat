@@ -1,0 +1,28 @@
+{
+  "name": "@zalo/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.json --module ES2022 --outDir dist/esm && node scripts/mark-esm.mjs",
+    "dev": "node scripts/watch.mjs",
+    "lint": "eslint src && tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@zalo/tsconfig": "workspace:*",
+    "vitest": "^3.2.4"
+  },
+  "module": "./dist/esm/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/index.js"
+    }
+  }
+}
