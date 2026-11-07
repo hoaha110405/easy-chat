@@ -6,7 +6,7 @@ The frontend is a provider-neutral workspace. `/inbox` contains the unified conv
 
 `apps/web/src/lib/channels.ts` is the UI registry for provider names, categories, availability, colors, channel labels, and settings routes. The catalog, account identity labels, sidebar links, and conversation details read from this registry. `ProviderMark` supplies a common icon container. Unknown channel types use a neutral fallback instead of being labeled as Zalo.
 
-Only Zalo Personal and Zalo OA are currently implemented. Messenger, Instagram, WhatsApp and Email are explicitly labeled as planned, with disabled connection controls. Their catalog entries do not call an external API or imply an existing integration.
+Implemented channels are Zalo Personal, Zalo OA, Facebook Page, TikTok Business, TikTok Shop, Telegram Bot, Telegram Personal and WhatsApp Business. Each channel requires its own credentials and provider permissions before live use. Messenger Personal remains unsupported; Instagram and Email remain planned. See the [configuration guide](cau-hinh.md) for setup and the [media capability matrix](media-attachments.md) for attachment limits.
 
 Before enabling another provider, implement its backend authentication/adapter, owner-scoped account and conversation access, public shared schemas, and matching API account keys. Then add its channel definition and settings route, and mark its provider entry available. The registry describes presentation; it does not replace the backend integration.
 

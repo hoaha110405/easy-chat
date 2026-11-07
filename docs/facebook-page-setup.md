@@ -6,14 +6,14 @@ Facebook Page dùng OAuth, Messenger Platform và Graph API chính thức. Messe
 
 Giữ nguyên NestJS, React, Prisma/PostgreSQL và hộp thư hiện có. Không thêm ORM, Redis, BullMQ hay máy chủ realtime. Facebook dùng chung `ChannelAccount`, `Conversation`, `Message`, hàng đợi giao dịch `PersonalCommand`, biên nhận `WebhookEvent`, SSE có xác thực và **một worker chung** với Zalo. Tên bảng/worker cũ được giữ để tương thích.
 
-| Kênh              | Kết nối                         | Nhận/lịch sử                                                                                                       | Gửi                                  |
-| ----------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
-| Zalo Personal     | QR hiện có                      | Giữ nguyên listener, media và ảnh đại diện hiện có                                                                 | Văn bản một người nhận như trước     |
-| Zalo OA           | OAuth hiện có                   | Giữ nguyên webhook và lịch sử đã hỗ trợ                                                                            | Chỉ đọc như trước                    |
-| Facebook Page     | OAuth, chọn Page được cấp quyền | Webhook; đồng bộ hội thoại Messenger một người nhận và phần lịch sử Meta cho phép; ảnh đại diện khi quyền cho phép | Văn bản, trong cửa sổ trả lời 24 giờ |
-| Messenger cá nhân | Chưa hỗ trợ                     | Chưa hỗ trợ, gồm E2EE                                                                                              | Chưa hỗ trợ                          |
+| Kênh              | Kết nối                         | Nhận/lịch sử                                                                                                       | Gửi                                                     |
+| ----------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| Zalo Personal     | QR hiện có                      | Giữ nguyên listener, media và ảnh đại diện hiện có                                                                 | Văn bản, tài liệu, âm thanh một người nhận              |
+| Zalo OA           | OAuth hiện có                   | Giữ nguyên webhook và lịch sử đã hỗ trợ                                                                            | Tài liệu theo quyền/cửa sổ; chưa gửi văn bản/âm thanh   |
+| Facebook Page     | OAuth, chọn Page được cấp quyền | Webhook; đồng bộ hội thoại Messenger một người nhận và phần lịch sử Meta cho phép; ảnh đại diện khi quyền cho phép | Văn bản, tài liệu, âm thanh trong cửa sổ trả lời 24 giờ |
+| Messenger cá nhân | Chưa hỗ trợ                     | Chưa hỗ trợ, gồm E2EE                                                                                              | Chưa hỗ trợ                                             |
 
-ID tài khoản ngoài là chuỗi; khóa duy nhất gồm owner, loại kênh và ID. Hội thoại Page dùng `PAGE_PSID`: `externalUserId` là PSID, `externalConversationId` là mã hội thoại Graph riêng. ID Zalo/global Facebook/personal thread không dùng lẫn nhau. Nội dung ảnh, video, file hoặc sticker nhận được được lưu dạng attachment và hiển thị bằng thành phần hiện có khi có URL an toàn; gửi attachment chưa được hỗ trợ.
+ID tài khoản ngoài là chuỗi; khóa duy nhất gồm owner, loại kênh và ID. Hội thoại Page dùng `PAGE_PSID`: `externalUserId` là PSID, `externalConversationId` là mã hội thoại Graph riêng. ID Zalo/global Facebook/personal thread không dùng lẫn nhau. Nội dung ảnh, video, file hoặc sticker nhận được được lưu dạng attachment và hiển thị bằng thành phần hiện có khi có URL an toàn; gửi tài liệu/âm thanh đã dùng composer và outbox chung; xem [giới hạn media](media-attachments.md).
 
 ## Cấu hình backend
 

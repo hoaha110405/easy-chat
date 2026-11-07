@@ -108,7 +108,7 @@ Deploy one personal worker per database. A dedicated PostgreSQL session holds an
 
 QR login handles generated, scanned/waiting confirmation, expired, declined, cancelled, failed, and connected states. Concurrent/repeated requests for the same account reuse one active attempt. Cancel/disconnect increments a database generation so late callbacks cannot restore an old attempt.
 
-Personal conversations support replies. There is no phone-number-based contact discovery or global conversation import. A new conversation first appears when the connected listener receives a message for that thread. Existing OA conversations remain read-only and retain the original OAuth/webhook behavior.
+Personal conversations support replies. There is no phone-number-based contact discovery or global conversation import. A new conversation first appears when the connected listener receives a message for that thread. OA conversations retain their OAuth/webhook behavior and now support document sending within the configured policy; OA text/audio sending is not enabled. Personal document/audio sending is also available. See [media capabilities](media-attachments.md).
 
 ## REST API
 

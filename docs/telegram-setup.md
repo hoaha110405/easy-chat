@@ -117,19 +117,19 @@ Chạy đúng **một worker chung** dùng PostgreSQL advisory lease hiện có;
 
 ## Phạm vi MVP và trạng thái tin
 
-| Nội dung                             | Hành vi                                                                                                                                      |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cloud private/basic group/supergroup | Đồng bộ chat, lịch sử phân trang, tin mới/từ thiết bị khác, sửa/xóa vĩnh viễn theo update                                                    |
-| Secret Chat, broadcast channel       | Ngoài phạm vi; `use_secret_chats=false`                                                                                                      |
-| Text reply                           | Đi qua outbox hiện có; kiểm tra chủ sở hữu, quyền chat và idempotency                                                                        |
-| Media/avatar Telegram                | Lưu loại/caption và Bot file ID; MVP chưa tải file Telegram, ảnh đại diện hoặc gửi attachment                                                |
-| Forum/topic                          | Chưa hỗ trợ gửi; hiển thị đọc khi có dữ liệu                                                                                                 |
-| Read/unread                          | Provider unread/watermark riêng với số chưa đọc trong easyChat; không gọi `viewMessages`/`openChat` khi sync hay xem chat                    |
-| Read receipt                         | Chỉ suy ra `readAt` cho tin đi trong chat riêng khi watermark TDLib xác nhận; không tạo read receipt cá nhân cho nhóm                        |
-| TDLib message pending                | Giữ `SENDING` đến update thành công; temp ID lưu để đối chiếu ACK muộn                                                                       |
-| Kết quả gửi mơ hồ                    | `UNKNOWN`, không tự POST lại; kiểm tra Telegram trước khi quyết định thao tác khác                                                           |
-| 429/FLOOD_WAIT                       | Lưu thời điểm được thử lại, tối đa 3 lần tự thử với lỗi chắc chắn có thể thử lại; không bulk send                                            |
-| History lớn                          | 25 tin/trang, tối đa 100 trang mỗi lượt chạy và có checkpoint; chọn Thông tin hội thoại → Đồng bộ lịch sử Telegram để tiếp tục từ checkpoint |
+| Nội dung                             | Hành vi                                                                                                                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloud private/basic group/supergroup | Đồng bộ chat, lịch sử phân trang, tin mới/từ thiết bị khác, sửa/xóa vĩnh viễn theo update                                                                                     |
+| Secret Chat, broadcast channel       | Ngoài phạm vi; `use_secret_chats=false`                                                                                                                                       |
+| Text reply                           | Đi qua outbox hiện có; kiểm tra chủ sở hữu, quyền chat và idempotency                                                                                                         |
+| Media/avatar Telegram                | Nhận/tải tài liệu và audio/voice qua proxy riêng tư; gửi tài liệu/âm thanh qua worker. Ảnh đại diện Telegram chưa được tải bổ sung; xem [media đa kênh](media-attachments.md) |
+| Forum/topic                          | Chưa hỗ trợ gửi; hiển thị đọc khi có dữ liệu                                                                                                                                  |
+| Read/unread                          | Provider unread/watermark riêng với số chưa đọc trong easyChat; không gọi `viewMessages`/`openChat` khi sync hay xem chat                                                     |
+| Read receipt                         | Chỉ suy ra `readAt` cho tin đi trong chat riêng khi watermark TDLib xác nhận; không tạo read receipt cá nhân cho nhóm                                                         |
+| TDLib message pending                | Giữ `SENDING` đến update thành công; temp ID lưu để đối chiếu ACK muộn                                                                                                        |
+| Kết quả gửi mơ hồ                    | `UNKNOWN`, không tự POST lại; kiểm tra Telegram trước khi quyết định thao tác khác                                                                                            |
+| 429/FLOOD_WAIT                       | Lưu thời điểm được thử lại, tối đa 3 lần tự thử với lỗi chắc chắn có thể thử lại; không bulk send                                                                             |
+| History lớn                          | 25 tin/trang, tối đa 100 trang mỗi lượt chạy và có checkpoint; chọn Thông tin hội thoại → Đồng bộ lịch sử Telegram để tiếp tục từ checkpoint                                  |
 
 TDLib có thể tự tiếp tục xử lý tin đã nhận vào hàng đợi nội bộ sau reconnect. easyChat không gọi lại `sendMessage` cho intent `UNKNOWN`; update thành công muộn có thể xác nhận lại intent đó. Trạng thái `SENT` nghĩa là Telegram đã xác nhận tin, không đồng nghĩa người nhận đã xem.
 
