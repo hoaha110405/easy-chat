@@ -264,6 +264,15 @@ describe('stored conversation viewer', () => {
         .getByRole('img', { name: 'Ảnh tài khoản Tài khoản công việc' })
         .querySelector('img'),
     ).toHaveAttribute('src', 'https://example.com/work.jpg');
+    const attachments = within(history).getByRole('group', {
+      name: 'Đính kèm tài liệu và âm thanh',
+    });
+    expect(
+      within(attachments).getByRole('button', { name: 'Tài liệu' }),
+    ).toBeEnabled();
+    expect(
+      within(attachments).getByRole('button', { name: 'Âm thanh' }),
+    ).toBeEnabled();
     const info = within(history).getByRole('button', {
       name: 'Thông tin hội thoại',
     });

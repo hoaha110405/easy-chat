@@ -36,17 +36,12 @@ export function Layout({ onLogout }: { onLogout: () => Promise<void> }) {
   const focused =
     inInbox && new URLSearchParams(location.search).get('focus') === '1';
   const compact = inInbox && !expanded;
+  const activeChannel = Object.values(channelDefinitions).find(
+    (channel) => channel.settingsPath === location.pathname,
+  );
   const title = inInbox
     ? 'Hộp thư'
-    : location.pathname === '/personal'
-      ? 'Zalo cá nhân'
-      : location.pathname === '/connection'
-        ? 'Zalo Official Account'
-        : location.pathname === '/facebook/page'
-          ? 'Facebook Page'
-          : location.pathname === '/facebook/personal'
-            ? 'Messenger cá nhân · Thử nghiệm'
-            : 'Kết nối ứng dụng';
+    : (activeChannel?.label ?? 'Kết nối ứng dụng');
   const navigation = [
     { to: '/inbox', label: 'Hộp thư', icon: Inbox },
     { to: '/apps', label: 'Kết nối ứng dụng', icon: LayoutGrid },
@@ -144,7 +139,12 @@ export function Layout({ onLogout }: { onLogout: () => Promise<void> }) {
               </NavLink>
             ))}
           </nav>
-          <div className={cn('mt-6', compact ? 'px-2' : 'px-3')}>
+          <div
+            className={cn(
+              'mt-6 min-h-0 flex-1 overflow-y-auto',
+              compact ? 'px-2' : 'px-3',
+            )}
+          >
             {!compact ? (
               <div className="mb-3 flex items-center justify-between px-3.5">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -182,11 +182,13 @@ export function Layout({ onLogout }: { onLogout: () => Promise<void> }) {
                   <ProviderMark provider={channel.providerId} small />
                   {compact ? (
                     <span className="absolute bottom-0.5 right-0.5 rounded bg-white px-0.5 text-[7px] font-semibold text-slate-500">
-                      {channel.shortLabel
-                        .split(' ')
-                        .map((word) => word[0])
-                        .join('')
-                        .slice(0, 2)}
+                      {channel.providerId === 'whatsapp'
+                        ? 'WA'
+                        : channel.shortLabel
+                            .split(' ')
+                            .map((word) => word[0])
+                            .join('')
+                            .slice(0, 2)}
                     </span>
                   ) : (
                     <>
@@ -208,7 +210,9 @@ export function Layout({ onLogout }: { onLogout: () => Promise<void> }) {
               );
             })}
           </div>
-          <div className={cn('mt-auto', compact ? 'px-2 pb-3' : 'p-4')}>
+          <div
+            className={cn('mt-auto shrink-0', compact ? 'px-2 pb-3' : 'p-4')}
+          >
             {!compact ? (
               <Link
                 to="/apps"

@@ -40,6 +40,15 @@ export const providers: ProviderDefinition[] = [
     background: '#f2efff',
   },
   {
+    id: 'whatsapp',
+    name: 'WhatsApp',
+    category: 'messaging',
+    available: true,
+    description: 'Tin nhắn số WhatsApp Business qua Cloud API chính thức.',
+    color: '#139a62',
+    background: '#edfaf3',
+  },
+  {
     id: 'tiktok-business',
     name: 'TikTok Business',
     category: 'messaging',
@@ -77,15 +86,6 @@ export const providers: ProviderDefinition[] = [
     description: 'Giữ liên lạc với khách hàng qua tin nhắn Instagram.',
     color: '#cd5480',
     background: '#fff0f5',
-  },
-  {
-    id: 'whatsapp',
-    name: 'WhatsApp',
-    category: 'messaging',
-    available: true,
-    description: 'Tin nhắn số WhatsApp Business qua Cloud API chính thức.',
-    color: '#139a62',
-    background: '#edfaf3',
   },
   {
     id: 'email',

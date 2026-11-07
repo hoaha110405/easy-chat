@@ -103,7 +103,7 @@ export function InboxPage() {
     >
       <div
         className={cn(
-          'flex shrink-0 items-center gap-2',
+          'flex shrink-0 flex-wrap items-center gap-2',
           focused ? 'px-3 py-2' : 'mb-2',
         )}
       >
@@ -164,6 +164,21 @@ export function InboxPage() {
           {conversations.isError ? 'Đang cập nhật lại' : 'Tự động cập nhật'}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5 border-emerald-200 bg-emerald-50 px-2.5 text-[11px] text-emerald-800 hover:bg-emerald-100"
+          >
+            <Link
+              to="/whatsapp"
+              aria-label="WhatsApp"
+              title="Kết nối và quản lý WhatsApp Business"
+            >
+              <ProviderMark provider="whatsapp" small className="size-5" />
+              WhatsApp
+            </Link>
+          </Button>
           <Button
             asChild
             variant="ghost"
@@ -445,7 +460,7 @@ export function InboxPage() {
         <section
           aria-label="Nội dung hội thoại"
           className={cn(
-            'relative flex min-w-0 flex-1',
+            'relative flex min-h-0 min-w-0 flex-1 overflow-hidden',
             !conversationId && 'hidden md:flex',
           )}
         >
@@ -476,6 +491,14 @@ export function InboxPage() {
                   ? 'Chọn một cuộc trò chuyện để xem tin nhắn. Tài khoản nhận và trả lời luôn được hiển thị rõ ràng.'
                   : 'Kết nối tài khoản của bạn để bắt đầu nhận và quản lý tin nhắn tại cùng một nơi.'}
               </p>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 rounded-xl border border-teal-100 bg-white px-3 py-2 text-xs text-slate-600">
+                <span className="font-medium text-teal-800">
+                  Tài liệu · Âm thanh
+                </span>
+                <span>
+                  Chọn một hội thoại để xem tệp và dùng nút đính kèm bên dưới.
+                </span>
+              </div>
               {filtered.length ? (
                 <Button
                   className="mt-6"

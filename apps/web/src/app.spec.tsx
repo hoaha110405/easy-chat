@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app';
 afterEach(() => vi.unstubAllGlobals());
 describe('workspace authentication flow', () => {
-  it('moves from sign-in into the inbox, then back after sign-out', async () => {
+  it('opens WhatsApp from the compact inbox without a connected account and returns after sign-out', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string) => {
@@ -30,7 +30,18 @@ describe('workspace authentication flow', () => {
                     connection: null,
                     failedWebhookCount: 0,
                   }
-                : { items: [], page: 1, limit: 30, hasMore: false };
+                : input.endsWith('/channels/whatsapp')
+                  ? {
+                      enabled: true,
+                      configured: false,
+                      embeddedAvailable: false,
+                      embeddedStatus: 'CONFIGURATION_OR_APPROVAL_REQUIRED',
+                      workerOnline: true,
+                      accounts: [],
+                      selection: null,
+                      restrictions: [],
+                    }
+                  : { items: [], page: 1, limit: 30, hasMore: false };
         return { ok: true, status: 200, json: async () => ({ data }) };
       }),
     );
@@ -53,6 +64,21 @@ describe('workspace authentication flow', () => {
     expect(
       await screen.findByRole('heading', { name: 'Hộp thư' }),
     ).toBeInTheDocument();
+    const whatsapp = screen.getByRole('link', {
+      name: 'WhatsApp',
+    });
+    expect(whatsapp).toHaveAttribute('href', '/whatsapp');
+    fireEvent.click(whatsapp);
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Chưa cấu hình WhatsApp Business',
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(
+        screen.getByRole('navigation', { name: 'Điều hướng chính' }),
+      ).getByRole('link', { name: 'Hộp thư' }),
+    );
     fireEvent.click(
       screen.getByRole('button', { name: 'Mở rộng thanh điều hướng' }),
     );

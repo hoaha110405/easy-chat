@@ -227,7 +227,11 @@ export function ConversationComposer({
     send.mutate(input);
   }
   return (
-    <form onSubmit={submit} className="shrink-0 bg-white px-4 pb-3 pt-2">
+    <form
+      aria-label="Soạn tin nhắn và gửi tệp"
+      onSubmit={submit}
+      className="relative z-10 max-h-[45dvh] shrink-0 overflow-y-auto border-t border-slate-200 bg-white px-3 pb-3 pt-3 sm:px-4"
+    >
       {send.error ? (
         <div className="mb-3">
           <ErrorNotice error={send.error} />
@@ -240,7 +244,14 @@ export function ConversationComposer({
         </p>
       ) : null}
       {
-        <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div
+          role="group"
+          aria-label="Đính kèm tài liệu và âm thanh"
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-teal-100 bg-teal-50/50 p-2"
+        >
+          <span className="mr-1 text-[11px] font-semibold text-slate-700">
+            Đính kèm
+          </span>
           <input
             ref={documentInput}
             type="file"
@@ -286,7 +297,7 @@ export function ConversationComposer({
               send.isPending ||
               Boolean(unconfirmed)
             }
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-800 transition-colors hover:border-teal-300 hover:bg-teal-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 disabled:opacity-60"
           >
             <Paperclip className="size-3.5" />
             Tài liệu
@@ -300,7 +311,7 @@ export function ConversationComposer({
               send.isPending ||
               Boolean(unconfirmed)
             }
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-800 transition-colors hover:border-teal-300 hover:bg-teal-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 disabled:opacity-60"
           >
             <Music2 className="size-3.5" />
             Âm thanh
