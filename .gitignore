@@ -68,3 +68,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 !**/.env.example
 
 **/dist-worker/
+
+# Official TDLib source/build and encrypted Telegram runtime data
+/.cache/tdlib/
+/.local/
+/native/telegram/build/

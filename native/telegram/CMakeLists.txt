@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(easychat_tdjson_bridge LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+find_package(Threads REQUIRED)
+add_executable(tdjson-bridge bridge.cpp)
+target_link_libraries(tdjson-bridge PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
+target_compile_options(tdjson-bridge PRIVATE -Wall -Wextra -Werror -fstack-protector-strong)

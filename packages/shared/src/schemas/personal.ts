@@ -9,6 +9,8 @@ export const personalConnectionStateSchema = z.enum([
   'ERROR',
 ]);
 export const deliveryStatusSchema = z.enum([
+  'DELIVERED',
+  'READ',
   'PENDING',
   'SENDING',
   'SENT',
@@ -46,6 +48,7 @@ export const createPersonalAccountSchema = z.object({
 export const sendTextSchema = z.object({
   content: z.string().trim().min(1).max(2000),
   idempotencyKey: z.string().uuid(),
+  replyToMessageId: z.string().cuid().optional(),
 });
 export const realtimeEventSchema = z.object({
   type: z.enum([
@@ -55,6 +58,7 @@ export const realtimeEventSchema = z.object({
     'channel.qr_expired',
     'channel.qr_declined',
     'channel.connected',
+    'channel.updated',
     'channel.disconnected',
     'channel.reauth_required',
     'channel.error',

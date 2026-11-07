@@ -1,3 +1,4 @@
+import { MediaStore } from './media-store';
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { PrismaService } from '../database/prisma.service';
@@ -10,6 +11,7 @@ import { AdminGuard } from '../modules/auth/admin.guard';
     ConfigService,
     PrismaService,
     CryptoService,
+    MediaStore,
     AuthService,
     AdminGuard,
   ],
@@ -17,6 +19,7 @@ import { AdminGuard } from '../modules/auth/admin.guard';
     ConfigService,
     PrismaService,
     CryptoService,
+    MediaStore,
     AuthService,
     AdminGuard,
   ],

@@ -358,6 +358,64 @@ export class ZcaPersonalAdapter implements PersonalAdapter {
     this.stopListening();
     this.api = undefined;
   }
+  async sendMediaMessage(
+    threadId: string,
+    file: { bytes: Buffer; name: string; mime: string },
+    kind: 'document' | 'audio',
+  ) {
+    if (!this.api || this.state !== 'CONNECTED' || this.stop.signal.aborted)
+      throw new PersonalAdapterError('ZALO_NOT_CONNECTED', true);
+    const to = personalExternalId.parse(threadId);
+    const source = {
+      data: file.bytes,
+      filename: file.name as `${string}.${string}`,
+      metadata: { totalSize: file.bytes.length },
+    };
+    if (kind === 'audio') {
+      let uploaded: Awaited<ReturnType<API['uploadAttachment']>>;
+      try {
+        uploaded = await this.api.uploadAttachment(source, to, ThreadType.User);
+      } catch {
+        throw new PersonalAdapterError('ZALO_MEDIA_UPLOAD_FAILED', true);
+      }
+      const asset = uploaded.find((v) => v.fileType === 'others');
+      if (!asset || asset.fileType !== 'others')
+        throw new PersonalAdapterError('ZALO_MEDIA_UPLOAD_FAILED', true);
+      const url = new URL(asset.fileUrl);
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password ||
+        url.port ||
+        !/(?:^|\.)(?:zdn\.vn|zaloapp\.com|dlfl\.vn)$/.test(url.hostname)
+      )
+        throw new PersonalAdapterError('ZALO_MEDIA_UPLOAD_FAILED', true);
+      try {
+        const r = await this.api.sendVoice(
+          { voiceUrl: url.href },
+          to,
+          ThreadType.User,
+        );
+        return { externalMessageId: personalExternalId.parse(r.msgId) };
+      } catch {
+        throw new PersonalAdapterError('ZALO_SEND_UNKNOWN');
+      }
+    }
+    try {
+      const r = await this.api.sendMessage(
+        { msg: '', attachments: [source] },
+        to,
+        ThreadType.User,
+      );
+      if (r.message || r.attachment.length !== 1)
+        throw Error('Unexpected message count');
+      return {
+        externalMessageId: personalExternalId.parse(r.attachment[0].msgId),
+      };
+    } catch {
+      throw new PersonalAdapterError('ZALO_SEND_UNKNOWN');
+    }
+  }
   async sendTextMessage(threadId: string, content: string) {
     if (!this.api || this.state !== 'CONNECTED' || this.stop.signal.aborted)
       throw new PersonalAdapterError('ZALO_NOT_CONNECTED', true);

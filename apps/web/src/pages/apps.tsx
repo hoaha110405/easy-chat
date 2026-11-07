@@ -324,7 +324,13 @@ function ProviderCard({
           ) : (
             <Clock3 className="size-2.5" />
           )}
-          {provider.available ? 'Đang hỗ trợ' : 'Trong kế hoạch'}
+          {provider.id.startsWith('tiktok-')
+            ? connected
+              ? 'Đã cấp quyền'
+              : 'Cần quyền TikTok'
+            : provider.available
+              ? 'Đang hỗ trợ'
+              : 'Trong kế hoạch'}
         </span>
       </div>
       <h3 className="mt-4 text-base font-semibold">{provider.name}</h3>
@@ -343,7 +349,9 @@ function ProviderCard({
               />
               {connected
                 ? `${connected} tài khoản đang kết nối`
-                : 'Sẵn sàng kết nối tài khoản'}
+                : provider.id.startsWith('tiktok-')
+                  ? 'Cần cấu hình ứng dụng và cấp quyền TikTok'
+                  : 'Sẵn sàng kết nối tài khoản'}
             </p>
             <div className="space-y-2">
               {Object.entries(channelDefinitions)

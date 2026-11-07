@@ -353,11 +353,14 @@ export class FacebookGraphClient {
         },
         params,
         ...(options.data !== undefined ? { data: options.data } : {}),
-        timeout: this.timeoutMs,
-        signal: AbortSignal.timeout(this.timeoutMs),
+        timeout: options.data instanceof FormData ? 30000 : this.timeoutMs,
+        signal: AbortSignal.timeout(
+          options.data instanceof FormData ? 30000 : this.timeoutMs,
+        ),
         maxRedirects: 0,
         maxContentLength: 2 * 1024 * 1024,
-        maxBodyLength: 128 * 1024,
+        maxBodyLength:
+          options.data instanceof FormData ? 20_000_000 + 65536 : 128 * 1024,
         proxy: false,
         validateStatus: () => true,
       });
@@ -693,6 +696,70 @@ export class FacebookGraphClient {
     };
   }
 
+  uploadMedia(
+    pageId: string,
+    token: string,
+    file: { bytes: Buffer; mime: string; name: string },
+    kind: 'document' | 'audio',
+  ) {
+    const data = new FormData();
+    data.set(
+      'message',
+      JSON.stringify({
+        attachment: {
+          type: kind === 'document' ? 'file' : 'audio',
+          payload: { is_reusable: true },
+        },
+      }),
+    );
+    data.set(
+      'filedata',
+      new Blob([new Uint8Array(file.bytes)], { type: file.mime }),
+      file.name,
+    );
+    return this.request(
+      'POST',
+      `${this.numericId(pageId)}/message_attachments`,
+      z.object({ attachment_id: id }),
+      { token, data },
+    );
+  }
+  async sendAttachment(
+    pageId: string,
+    token: string,
+    psid: string,
+    attachmentId: string,
+    kind: 'document' | 'audio',
+  ) {
+    this.numericId(psid);
+    this.nodeId(attachmentId);
+    const r = await this.request(
+      'POST',
+      `${this.numericId(pageId)}/messages`,
+      z.object({ message_id: id, recipient_id: id }),
+      {
+        token,
+        send: true,
+        data: {
+          recipient: { id: psid },
+          messaging_type: 'RESPONSE',
+          message: {
+            attachment: {
+              type: kind === 'document' ? 'file' : 'audio',
+              payload: { attachment_id: attachmentId },
+            },
+          },
+        },
+      },
+    );
+    if (r.recipient_id !== psid)
+      throw new FacebookGraphError(
+        'FACEBOOK_INVALID_RESPONSE',
+        'Unexpected recipient',
+        { ambiguous: true },
+      );
+    return { messageId: r.message_id, recipientId: r.recipient_id };
+  }
   /** Caller must enforce a verified customer-initiated 24h window before enqueue AND send. */
   async sendText(
     pageId: string,

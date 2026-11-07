@@ -48,9 +48,14 @@ describe('application connection hub', () => {
   it('offers Zalo and Page setup, labels personal Messenger unavailable, and disables future providers', async () => {
     const { client, fetcher } = setup();
     const apps = screen.getByRole('region', { name: 'Danh sách ứng dụng' });
-    expect(within(apps).getByRole('link', { name: 'Cá nhân' })).toHaveAttribute(
+    expect(
+      within(apps)
+        .getAllByRole('link', { name: 'Cá nhân' })
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['/personal', '/telegram/personal']);
+    expect(within(apps).getByRole('link', { name: 'Bot' })).toHaveAttribute(
       'href',
-      '/personal',
+      '/telegram/bot',
     );
     expect(
       within(apps).getByRole('link', { name: 'Official Account' }),
@@ -59,13 +64,16 @@ describe('application connection hub', () => {
       within(apps)
         .getAllByRole('button', { name: 'Sắp hỗ trợ' })
         .filter((button) => button.hasAttribute('disabled')),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
     expect(
       within(apps).getByRole('link', { name: 'Facebook Page' }),
     ).toHaveAttribute('href', '/facebook/page');
     expect(
       within(apps).getByRole('link', { name: 'Messenger cá nhân Chưa hỗ trợ' }),
     ).toHaveAttribute('href', '/facebook/personal');
+    expect(
+      within(apps).getByRole('link', { name: 'Business Cloud API' }),
+    ).toHaveAttribute('href', '/whatsapp');
     const own = screen.getByRole('region', { name: 'Tài khoản của bạn' });
     expect(
       await within(own).findByText('Tài khoản công việc'),
@@ -79,7 +87,7 @@ describe('application connection hub', () => {
       '/inbox?account=oa%3Aaccountb',
     ]);
     expect(within(own).getByText('Chưa kết nối')).toBeInTheDocument();
-    expect(within(own).getByText('Đang kết nối')).toBeInTheDocument();
+    expect(within(own).getByText('Đã kết nối')).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledTimes(1);
     client.clear();
   });

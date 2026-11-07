@@ -4,3 +4,7 @@ node_modules
 **/.turbo
 pnpm-lock.yaml
 coverage
+
+.cache/
+.local/
+native/telegram/build/

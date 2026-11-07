@@ -4,6 +4,11 @@ export const channelTypeSchema = z.enum([
   'ZALO_PERSONAL',
   'FACEBOOK_PAGE',
   'FACEBOOK_PERSONAL',
+  'TIKTOK_BUSINESS',
+  'TIKTOK_SHOP',
+  'TELEGRAM_BOT',
+  'TELEGRAM_PERSONAL',
+  'WHATSAPP_BUSINESS',
 ]);
 export const channelAccountSchema = z.object({
   id: z.string(),
@@ -19,6 +24,7 @@ export const channelAccountSchema = z.object({
     'RECONNECTING',
     'REAUTH_REQUIRED',
     'UNSUPPORTED',
+    'PERMISSION_REQUIRED',
     'ERROR',
   ]),
   lastConnectedAt: z.string().nullable(),

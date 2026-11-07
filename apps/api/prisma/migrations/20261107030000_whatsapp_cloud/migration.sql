@@ -1,0 +1,4 @@
+ALTER TYPE "MessageSource" ADD VALUE 'WHATSAPP';
+ALTER TYPE "DeliveryStatus" ADD VALUE 'DELIVERED';
+ALTER TYPE "DeliveryStatus" ADD VALUE 'READ';
+ALTER TABLE "ChannelAccount" ADD COLUMN "providerMetadata" JSONB NOT NULL DEFAULT '{}';

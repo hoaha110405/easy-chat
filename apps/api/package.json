@@ -8,7 +8,7 @@
     "start": "node dist/main.js",
     "lint": "eslint src test && tsc --noEmit -p tsconfig.json",
     "test": "vitest run --exclude '**/*.integration.spec.ts'",
-    "test:integration": "vitest run test/database.integration.spec.ts test/personal.integration.spec.ts test/facebook.integration.spec.ts",
+    "test:integration": "vitest run test/database.integration.spec.ts test/personal.integration.spec.ts test/facebook.integration.spec.ts test/tiktok.integration.spec.ts test/unread.integration.spec.ts test/telegram.integration.spec.ts test/whatsapp.integration.spec.ts test/media.integration.spec.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",

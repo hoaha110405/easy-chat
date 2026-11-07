@@ -29,6 +29,11 @@ export interface PersonalAdapter {
   getUserProfiles(userIds: string[]): Promise<PersonalProfile[]>;
   getStickerAssets(stickerIds: number[]): Promise<PersonalSticker[]>;
   getRecentMessages(): Promise<unknown[]>;
+  sendMediaMessage?(
+    threadId: string,
+    file: { bytes: Buffer; name: string; mime: string },
+    kind: 'document' | 'audio',
+  ): Promise<{ externalMessageId: string }>;
   sendTextMessage(
     threadId: string,
     content: string,

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mediaSupportSchema } from './media.js';
 import { deliveryStatusSchema } from './personal.js';
 import { channelTypeSchema } from './facebook.js';
 
@@ -12,7 +13,9 @@ export const conversationFilterSchema = paginationSchema.extend({
   account: z
     .string()
     .max(160)
-    .regex(/^(personal|oa|facebook-page|facebook-personal):[a-z0-9]+$/)
+    .regex(
+      /^(personal|oa|facebook-page|facebook-personal|tiktok-business|tiktok-shop|telegram-bot|whatsapp-business|telegram-personal):[a-z0-9]+$/,
+    )
     .optional(),
 });
 export const inboxAccountSchema = z.object({
@@ -24,6 +27,7 @@ export const inboxAccountSchema = z.object({
   avatarUrl: z.string().nullable(),
   status: z.string(),
   conversationCount: z.number().int().nonnegative(),
+  unreadMessageCount: z.number().int().nonnegative().optional(),
 });
 export const inboxAccountsSchema = z.object({
   accounts: z.array(inboxAccountSchema),
@@ -48,20 +52,40 @@ export const attachmentSchema = z.object({
   url: z.string().nullable(),
   name: z.string().nullable(),
   previewUrl: z.string().nullable().optional(),
+  authenticatedPath: z
+    .string()
+    .regex(/^\/(?:channels\/whatsapp\/)?messages\/[a-z0-9]+\/media$/)
+    .optional(),
 });
 export const messageSchema = z.object({
   id: z.string(),
   externalMessageId: z.string().nullable(),
   deliveryStatus: deliveryStatusSchema.optional(),
   deliveryError: z.string().nullable().optional(),
+  providerStatus: z
+    .enum(['sent', 'delivered', 'read', 'failed'])
+    .nullable()
+    .optional(),
   idempotencyKey: z.string().nullable().optional(),
+  inboxUnread: z.boolean().optional(),
+  editedAt: z.string().nullable().optional(),
+  deletedAt: z.string().nullable().optional(),
+  senderName: z.string().nullable().optional(),
   direction: z.enum(['INCOMING', 'OUTGOING']),
   type: z.string(),
   content: z.string(),
   sentAt: z.string(),
   deliveredAt: z.string().nullable().optional(),
   readAt: z.string().nullable().optional(),
-  source: z.enum(['WEBHOOK', 'HISTORY', 'PERSONAL', 'FACEBOOK']),
+  source: z.enum([
+    'WEBHOOK',
+    'HISTORY',
+    'PERSONAL',
+    'FACEBOOK',
+    'TIKTOK',
+    'TELEGRAM',
+    'WHATSAPP',
+  ]),
   attachments: z.array(attachmentSchema),
 });
 export const conversationSchema = z.object({
@@ -71,10 +95,15 @@ export const conversationSchema = z.object({
   channelType: channelTypeSchema.optional(),
   sendBlockedReason: z.string().nullable().optional(),
   messagingWindowExpiresAt: z.string().nullable().optional(),
+  unreadCount: z.number().int().nonnegative().nullable().optional(),
+  inboxUnreadCount: z.number().int().nonnegative().optional(),
+  externalContactId: z.string().nullable().optional(),
+  externalConversationId: z.string().nullable().optional(),
   accountName: z.string().optional(),
   accountAvatar: z.string().nullable().optional(),
   accountExternalId: z.string().nullable().optional(),
   canSend: z.boolean().optional(),
+  mediaSupport: mediaSupportSchema.optional(),
   externalUserId: z.string(),
   customerName: z.string().nullable(),
   customerAvatar: z.string().nullable(),
@@ -106,3 +135,10 @@ export type Paginated<T> = {
   hasMore: boolean;
   nextCursor?: string | null;
 };
+
+export const readMessagesSchema = z.object({
+  messageIds: z.array(z.string().cuid()).min(1).max(200),
+});
+export const readMessagesResultSchema = z.object({
+  markedRead: z.number().int().nonnegative(),
+});

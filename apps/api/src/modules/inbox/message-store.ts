@@ -14,6 +14,8 @@ export type NormalizedMessage = {
   customerName?: string;
   customerAvatar?: string;
   externalConversationId?: string;
+  externalContactId?: string;
+  externalThreadType?: string;
 };
 type ChannelReference = {
   kind: 'oa' | 'personal';
@@ -30,7 +32,11 @@ export class MessageStore {
   ) {
     return this.persistRecord(
       tx,
-      { kind: 'personal', id: channelAccountId, threadType: 'PAGE_PSID' },
+      {
+        kind: 'personal',
+        id: channelAccountId,
+        threadType: message.externalThreadType ?? 'PAGE_PSID',
+      },
       message,
       externalSenderId,
     );
@@ -82,6 +88,7 @@ export class MessageStore {
           externalThreadType: channel.threadType ?? 'USER',
           externalUserId: message.userId,
           externalConversationId: message.externalConversationId,
+          externalContactId: message.externalContactId,
           customerName: message.customerName,
           customerAvatar: message.customerAvatar,
         },
@@ -108,6 +115,7 @@ export class MessageStore {
     if (
       message.customerName !== undefined ||
       message.customerAvatar !== undefined ||
+      message.externalContactId !== undefined ||
       message.externalConversationId !== undefined
     )
       await tx.conversation.update({
@@ -116,6 +124,7 @@ export class MessageStore {
           customerName: message.customerName,
           customerAvatar: message.customerAvatar,
           externalConversationId: message.externalConversationId,
+          externalContactId: message.externalContactId,
         },
       });
     const inserted = await tx.message.createMany({
@@ -126,6 +135,7 @@ export class MessageStore {
           externalMessageId: message.externalMessageId,
           externalSenderId,
           direction: message.direction,
+          inboxUnread: message.direction === 'INCOMING',
           type: message.type,
           content: message.content,
           metadata: message.metadata,
@@ -152,10 +162,31 @@ export class MessageStore {
           ),
         },
       });
+    if (
+      channel.kind === 'oa' &&
+      inserted.count > 0 &&
+      message.direction === 'INCOMING'
+    )
+      await tx.conversation.updateMany({
+        where: {
+          id: conversation.id,
+          OR: [
+            { lastInboundAt: null },
+            { lastInboundAt: { lt: message.sentAt } },
+          ],
+        },
+        data: { lastInboundAt: message.sentAt },
+      });
     // Only a real inbound message opens the Page reply window. Echoes and receipts never do.
     if (
       inserted.count > 0 &&
-      channel.threadType === 'PAGE_PSID' &&
+      [
+        'PAGE_PSID',
+        'TIKTOK_BUSINESS',
+        'TIKTOK_SHOP',
+        'TELEGRAM_BOT',
+        'TELEGRAM_PERSONAL',
+      ].includes(channel.threadType ?? '') &&
       message.direction === 'INCOMING' &&
       message.sentAt.getTime() <= Date.now() + 60000
     )
@@ -185,6 +216,8 @@ export class MessageStore {
               },
             },
     });
+    if (saved.conversationId !== conversation.id)
+      throw new Error('EXTERNAL_MESSAGE_ID_COLLISION');
     return {
       conversationId: conversation.id,
       messageId: saved.id,

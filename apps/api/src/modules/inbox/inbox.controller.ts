@@ -14,6 +14,7 @@ import {
   paginationSchema,
   conversationFilterSchema,
   sendTextSchema,
+  readMessagesSchema,
 } from '@zalo/shared';
 import { AdminGuard } from '../auth/admin.guard';
 import { PersonalService } from '../zalo-personal/personal.service';
@@ -47,6 +48,20 @@ export class InboxController {
     return {
       data: await this.inbox.conversation(
         z.string().cuid().parse(id),
+        req.adminOwnerId!,
+      ),
+    };
+  }
+  @Post(':id/read') @HttpCode(200) async read(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() req: AdminRequest,
+  ) {
+    const input = readMessagesSchema.parse(body);
+    return {
+      data: await this.inbox.markRead(
+        z.string().cuid().parse(id),
+        input.messageIds,
         req.adminOwnerId!,
       ),
     };

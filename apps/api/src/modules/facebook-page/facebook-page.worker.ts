@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { MediaStore } from '../../common/media-store';
+import { Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { ChannelAccount, PersonalCommand, Prisma } from '@prisma/client';
 import { z } from 'zod';
@@ -34,6 +35,7 @@ export class FacebookPageWorker {
     private readonly crypto: CryptoService,
     private readonly graph: FacebookGraphClient,
     private readonly messages: MessageStore,
+    @Optional() private readonly media?: MediaStore,
   ) {}
   private token(account: ChannelAccount) {
     try {
@@ -661,6 +663,45 @@ export class FacebookPageWorker {
       });
       return;
     }
+    let attachmentId: string | undefined;
+    if (message.type === 'file' || message.type === 'audio') {
+      const policy = channelSendPolicy(account, message.conversation, true);
+      if (!policy.allowed)
+        throw new ApiError(
+          409,
+          policy.code ?? 'CHANNEL_NOT_CONNECTED',
+          policy.message ?? 'Reply blocked',
+        );
+      if (!this.media)
+        throw new FacebookGraphError(
+          'FACEBOOK_UNAVAILABLE',
+          'Private file storage unavailable',
+        );
+      const file = await this.media.read(message.id);
+      const old = z
+        .object({ facebook: z.object({ attachmentId: z.string() }) })
+        .safeParse(message.metadata);
+      if (old.success) attachmentId = old.data.facebook.attachmentId;
+      else {
+        attachmentId = (
+          await this.graph.uploadMedia(
+            account.externalAccountId!,
+            token,
+            file,
+            message.type === 'audio' ? 'audio' : 'document',
+          )
+        ).attachment_id;
+        await this.db.message.update({
+          where: { id: message.id },
+          data: {
+            metadata: {
+              ...z.record(z.unknown()).parse(message.metadata),
+              facebook: { attachmentId },
+            } as Prisma.InputJsonObject,
+          },
+        });
+      }
+    }
     const claimed = await this.db.$transaction(async (tx) => {
       const current = await this.lock(tx, account);
       const conversation = await tx.conversation.findUniqueOrThrow({
@@ -707,12 +748,20 @@ export class FacebookPageWorker {
     });
     if (!claimed || !active()) return;
     // No retry follows a timed-out/unconfirmed POST. Recovery preserves UNKNOWN.
-    const result = await this.graph.sendText(
-      account.externalAccountId!,
-      token,
-      message.conversation.externalUserId,
-      message.content,
-    );
+    const result = attachmentId
+      ? await this.graph.sendAttachment(
+          account.externalAccountId!,
+          token,
+          message.conversation.externalUserId,
+          attachmentId,
+          message.type === 'audio' ? 'audio' : 'document',
+        )
+      : await this.graph.sendText(
+          account.externalAccountId!,
+          token,
+          message.conversation.externalUserId,
+          message.content,
+        );
     if (!active()) return;
     await this.db.$transaction(async (tx) => {
       const current = await this.lock(tx, account);

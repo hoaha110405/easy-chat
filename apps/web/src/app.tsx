@@ -29,6 +29,31 @@ const FacebookPersonalConnectionPage = lazy(() =>
     default: module.FacebookPersonalConnectionPage,
   })),
 );
+const TikTokBusinessConnectionPage = lazy(() =>
+  import('@/pages/tiktok-connection').then((m) => ({
+    default: m.TikTokBusinessConnectionPage,
+  })),
+);
+const TikTokShopConnectionPage = lazy(() =>
+  import('@/pages/tiktok-connection').then((m) => ({
+    default: m.TikTokShopConnectionPage,
+  })),
+);
+const WhatsAppConnectionPage = lazy(() =>
+  import('@/pages/whatsapp-connection').then((m) => ({
+    default: m.WhatsAppConnectionPage,
+  })),
+);
+const TelegramBotConnectionPage = lazy(() =>
+  import('@/pages/telegram-connection').then((m) => ({
+    default: m.TelegramBotConnectionPage,
+  })),
+);
+const TelegramPersonalConnectionPage = lazy(() =>
+  import('@/pages/telegram-connection').then((m) => ({
+    default: m.TelegramPersonalConnectionPage,
+  })),
+);
 export function App() {
   const auth = useAuth();
   if (auth.isPending)
@@ -50,6 +75,17 @@ export function App() {
   return (
     <Routes>
       <Route element={<Layout onLogout={auth.logout} />}>
+        <Route path="/whatsapp" element={<WhatsAppConnectionPage />} />
+        <Route path="/telegram/bot" element={<TelegramBotConnectionPage />} />
+        <Route
+          path="/telegram/personal"
+          element={<TelegramPersonalConnectionPage />}
+        />
+        <Route
+          path="/tiktok/business"
+          element={<TikTokBusinessConnectionPage />}
+        />
+        <Route path="/tiktok/shop" element={<TikTokShopConnectionPage />} />
         <Route path="/apps" element={<AppsPage />} />
         <Route path="/personal" element={<PersonalConnectionPage />} />
         <Route path="/connection" element={<ConnectionPage />} />

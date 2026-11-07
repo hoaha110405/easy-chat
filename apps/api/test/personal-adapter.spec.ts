@@ -40,6 +40,12 @@ function apiFixture() {
     getContext: () => creds,
     getCookie: () => ({ toJSON: () => ({ cookies: creds.cookie }) }),
     sendMessage,
+    uploadAttachment: vi
+      .fn()
+      .mockResolvedValue([
+        { fileType: 'others', fileUrl: 'https://files.dlfl.vn/fixture.m4a' },
+      ]),
+    sendVoice: vi.fn().mockResolvedValue({ msgId: '998877' }),
     getUserInfo,
     getStickersDetail: vi.fn().mockResolvedValue([]),
   };
@@ -293,5 +299,101 @@ describe('real zca-js adapter boundary', () => {
     adapter.disconnect();
     await pending;
     expect(listener.listenerCount('old_messages')).toBe(0);
+  });
+});
+
+describe('Zalo document and voice SDK boundary', () => {
+  it('sends one document without a separate empty text message', async () => {
+    const { api, sendMessage } = apiFixture();
+    vi.spyOn(Zalo.prototype, 'login').mockResolvedValue(api);
+    const adapter = new ZcaPersonalAdapter();
+    await adapter.restoreSession(JSON.stringify(creds));
+    await adapter.startListening(vi.fn(), vi.fn());
+    sendMessage.mockResolvedValueOnce({
+      message: null,
+      attachment: [{ msgId: 112233 }],
+    } as never);
+    const bytes = Buffer.from('%PDF-fixture');
+    expect(
+      await adapter.sendMediaMessage(
+        '1234',
+        { bytes, name: 'invoice.pdf', mime: 'application/pdf' },
+        'document',
+      ),
+    ).toEqual({ externalMessageId: '112233' });
+    expect(sendMessage).toHaveBeenCalledWith(
+      {
+        msg: '',
+        attachments: [
+          {
+            data: bytes,
+            filename: 'invoice.pdf',
+            metadata: { totalSize: bytes.length },
+          },
+        ],
+      },
+      '1234',
+      ThreadType.User,
+    );
+    adapter.disconnect();
+  });
+  it('uploads audio in the connected session then sends voice using only the provider asset URL', async () => {
+    const { api } = apiFixture();
+    vi.spyOn(Zalo.prototype, 'login').mockResolvedValue(api);
+    const adapter = new ZcaPersonalAdapter();
+    await adapter.restoreSession(JSON.stringify(creds));
+    await adapter.startListening(vi.fn(), vi.fn());
+    const bytes = Buffer.from('ID3fixture');
+    expect(
+      await adapter.sendMediaMessage(
+        '1234',
+        { bytes, name: 'voice.mp3', mime: 'audio/mpeg' },
+        'audio',
+      ),
+    ).toEqual({ externalMessageId: '998877' });
+    expect(api.uploadAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({ data: bytes }),
+      '1234',
+      ThreadType.User,
+    );
+    expect(api.sendVoice).toHaveBeenCalledWith(
+      { voiceUrl: 'https://files.dlfl.vn/fixture.m4a' },
+      '1234',
+      ThreadType.User,
+    );
+    adapter.disconnect();
+  });
+  it('distinguishes a failed upload from an ambiguous voice send and rejects an unexpected asset host', async () => {
+    const { api } = apiFixture();
+    vi.spyOn(Zalo.prototype, 'login').mockResolvedValue(api);
+    const adapter = new ZcaPersonalAdapter();
+    await adapter.restoreSession(JSON.stringify(creds));
+    await adapter.startListening(vi.fn(), vi.fn());
+    const file = {
+      bytes: Buffer.from('ID3fixture'),
+      name: 'voice.mp3',
+      mime: 'audio/mpeg',
+    };
+    vi.mocked(api.uploadAttachment).mockRejectedValueOnce(
+      Error('private-upload-error'),
+    );
+    await expect(
+      adapter.sendMediaMessage('1234', file, 'audio'),
+    ).rejects.toMatchObject({
+      code: 'ZALO_MEDIA_UPLOAD_FAILED',
+      safeToRetry: true,
+    });
+    vi.mocked(api.uploadAttachment).mockResolvedValueOnce([
+      { fileType: 'others', fileUrl: 'https://evil.example/private' },
+    ] as never);
+    await expect(
+      adapter.sendMediaMessage('1234', file, 'audio'),
+    ).rejects.toMatchObject({ safeToRetry: true });
+    expect(api.sendVoice).not.toHaveBeenCalled();
+    vi.mocked(api.sendVoice).mockRejectedValueOnce(Error('unconfirmed'));
+    await expect(
+      adapter.sendMediaMessage('1234', file, 'audio'),
+    ).rejects.toMatchObject({ code: 'ZALO_SEND_UNKNOWN', safeToRetry: false });
+    adapter.disconnect();
   });
 });

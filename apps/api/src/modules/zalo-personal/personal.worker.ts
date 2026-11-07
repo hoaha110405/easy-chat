@@ -1,3 +1,6 @@
+import { ZaloOaMediaWorker } from '../zalo/zalo-oa-media.worker';
+import { MediaStore } from '../../common/media-store';
+import { WhatsAppWorker } from '../whatsapp/whatsapp.worker';
 import {
   Injectable,
   Optional,
@@ -27,6 +30,8 @@ import {
   normalizedPersonalSchema,
 } from './personal-normalize';
 import { WORKER_ID } from './personal-runtime';
+import { TelegramWorker } from '../telegram/telegram.worker';
+import { TikTokWorker } from '../tiktok/tiktok.worker';
 import { FacebookPageWorker } from '../facebook-page/facebook-page.worker';
 import { personalAttachmentSchema } from './personal-media';
 
@@ -51,6 +56,7 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
   private timer?: ReturnType<typeof setInterval>;
   private heartbeat?: ReturnType<typeof setInterval>;
   private busy = false;
+  private lastMediaCleanup = 0;
   private heartbeatBusy = false;
   private failedDispatch?: PersonalCommand;
   private readonly tasks = new Set<Promise<unknown>>();
@@ -65,6 +71,11 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
     private readonly sessions: ZaloSessionManager,
     private readonly messages: MessageStore,
     @Optional() private readonly facebook?: FacebookPageWorker,
+    @Optional() private readonly tiktok?: TikTokWorker,
+    @Optional() private readonly telegram?: TelegramWorker,
+    @Optional() private readonly whatsapp?: WhatsAppWorker,
+    @Optional() private readonly media?: MediaStore,
+    @Optional() private readonly zaloOa?: ZaloOaMediaWorker,
   ) {}
   async onModuleInit() {
     await this.start();
@@ -72,7 +83,11 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
   async start(schedule = true) {
     if (
       !this.config.env.ZALO_PERSONAL_ENABLED &&
-      !this.config.facebookConfigured
+      !this.config.env.ZALO_APP_ID &&
+      !this.config.facebookConfigured &&
+      !this.config.tiktokConfigured &&
+      !this.config.telegramConfigured &&
+      !this.config.whatsappConfigured
     ) {
       this.logger.log('Messaging worker has no enabled provider.');
       return;
@@ -93,8 +108,11 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
     );
     if (!lock.rows[0]?.locked) {
       await client.end();
-      throw new Error(
-        'A messaging worker already owns this database. Start only one worker.',
+      throw Object.assign(
+        new Error(
+          'A messaging worker already owns this database. Start only one worker.',
+        ),
+        { code: 'WORKER_ALREADY_RUNNING' },
       );
     }
     this.running = true;
@@ -109,6 +127,7 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
         update: { instanceId: this.instanceId, heartbeatAt: new Date() },
       });
       await this.recoverAfterRestart();
+      await this.telegram?.start();
       const accounts = await this.db.channelAccount.findMany({
         where: {
           channelType: 'ZALO_PERSONAL',
@@ -142,6 +161,7 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.sessions.disconnectAll();
+    void this.telegram?.stop().catch(() => undefined);
     this.logger.error(
       'Worker database lock was lost. Listeners stopped; restart the worker.',
     );
@@ -176,7 +196,16 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
     await this.db.$transaction(async (tx) => {
       const ambiguous = await tx.message.findMany({
         where: {
-          source: { in: ['PERSONAL', 'FACEBOOK'] },
+          source: {
+            in: [
+              'PERSONAL',
+              'FACEBOOK',
+              'TIKTOK',
+              'TELEGRAM',
+              'WHATSAPP',
+              'WEBHOOK',
+            ],
+          },
           deliveryStatus: 'SENDING',
         },
         select: {
@@ -187,7 +216,16 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
       });
       await tx.message.updateMany({
         where: {
-          source: { in: ['PERSONAL', 'FACEBOOK'] },
+          source: {
+            in: [
+              'PERSONAL',
+              'FACEBOOK',
+              'TIKTOK',
+              'TELEGRAM',
+              'WHATSAPP',
+              'WEBHOOK',
+            ],
+          },
           deliveryStatus: 'SENDING',
         },
         data: {
@@ -896,11 +934,36 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
     if (!this.running || this.busy) return;
     this.busy = true;
     try {
+      if (this.media && Date.now() - this.lastMediaCleanup > 60000) {
+        this.lastMediaCleanup = Date.now();
+        await this.media.cleanup();
+      }
       if (this.failedDispatch) {
         const command = this.failedDispatch;
         const failedAccount = await this.db.channelAccount.findUnique({
           where: { id: command.channelAccountId },
         });
+        if (
+          failedAccount?.channelType === 'WHATSAPP_BUSINESS' &&
+          this.whatsapp
+        ) {
+          await this.whatsapp.recoverDispatch(command, failedAccount);
+          this.failedDispatch = undefined;
+          return;
+        }
+        if (
+          failedAccount?.channelType.startsWith('TELEGRAM_') &&
+          this.telegram
+        ) {
+          await this.telegram.recoverDispatch(command, failedAccount);
+          this.failedDispatch = undefined;
+          return;
+        }
+        if (failedAccount?.channelType.startsWith('TIKTOK_') && this.tiktok) {
+          await this.tiktok.recoverDispatch(command, failedAccount);
+          this.failedDispatch = undefined;
+          return;
+        }
         if (failedAccount?.channelType === 'FACEBOOK_PAGE' && this.facebook) {
           await this.facebook.recoverDispatch(command, failedAccount);
           this.failedDispatch = undefined;
@@ -967,12 +1030,39 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
       });
       if (receipt)
         await (
-          receipt.eventName === 'facebook.page' && this.facebook
-            ? this.facebook.processInbound(receipt.id)
-            : this.processInbound(receipt.id)
+          receipt.eventName.startsWith('whatsapp.') && this.whatsapp
+            ? this.whatsapp.processInbound(receipt.id)
+            : receipt.eventName.startsWith('telegram.') && this.telegram
+              ? this.telegram.processInbound(receipt.id)
+              : receipt.eventName.startsWith('tiktok.') && this.tiktok
+                ? this.tiktok.processInbound(receipt.id)
+                : receipt.eventName === 'facebook.page' && this.facebook
+                  ? this.facebook.processInbound(receipt.id)
+                  : this.processInbound(receipt.id)
         ).catch(() =>
           this.logger.warn(
             `Personal receipt ${receipt.id} remains failed; attempts are bounded.`,
+          ),
+        );
+      await this.whatsapp
+        ?.poll()
+        .catch(() =>
+          this.logger.warn(
+            'WhatsApp scheduling failed; durable jobs remain queued.',
+          ),
+        );
+      await this.telegram
+        ?.poll()
+        .catch(() =>
+          this.logger.warn(
+            'Telegram scheduling failed; durable jobs remain queued.',
+          ),
+        );
+      await this.tiktok
+        ?.poll()
+        .catch(() =>
+          this.logger.warn(
+            'TikTok scheduling failed; queued work remains durable.',
           ),
         );
       const command = await this.claim();
@@ -983,6 +1073,24 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
         });
         if (!account || account.generation !== command.generation) {
           await this.failBeforeSend(command, 'ZALO_NOT_CONNECTED');
+          return;
+        }
+        if (account.channelType === 'ZALO_OA' && this.zaloOa) {
+          await this.zaloOa.process(command, account, () => this.running);
+          return;
+        }
+        if (account.channelType === 'WHATSAPP_BUSINESS' && this.whatsapp) {
+          await this.whatsapp.process(command, account, () => this.running);
+          return;
+        } else if (
+          account.channelType.startsWith('TELEGRAM_') &&
+          this.telegram
+        ) {
+          await this.telegram.process(command, account, () => this.running);
+          return;
+        }
+        if (account.channelType.startsWith('TIKTOK_') && this.tiktok) {
+          await this.tiktok.process(command, account, () => this.running);
           return;
         }
         if (account.channelType === 'FACEBOOK_PAGE' && this.facebook) {
@@ -1176,6 +1284,19 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
       await this.safeRetry(command, 'ZALO_NOT_CONNECTED');
       return;
     }
+    let media: Awaited<ReturnType<MediaStore['read']>> | undefined;
+    if (message.type === 'file' || message.type === 'audio') {
+      if (!entry.adapter.sendMediaMessage || !this.media) {
+        await this.failBeforeSend(command, 'MEDIA_CHANNEL_UNSUPPORTED');
+        return;
+      }
+      try {
+        media = await this.media.read(message.id);
+      } catch {
+        await this.failBeforeSend(command, 'MEDIA_EXPIRED');
+        return;
+      }
+    }
     const nextAt =
       (account.lastSendAt?.getTime() ?? 0) +
       this.config.env.ZALO_PERSONAL_SEND_INTERVAL_MS;
@@ -1230,11 +1351,17 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
     }
     try {
       const result = await withTimeout(
-        entry.adapter.sendTextMessage(
-          message.conversation.externalUserId,
-          message.content,
-        ),
-        15000,
+        media
+          ? entry.adapter.sendMediaMessage!(
+              message.conversation.externalUserId,
+              media,
+              message.type === 'audio' ? 'audio' : 'document',
+            )
+          : entry.adapter.sendTextMessage(
+              message.conversation.externalUserId,
+              message.content,
+            ),
+        media ? 45000 : 15000,
       );
       if (!this.running) return; // Successor worker recovers the durable SENDING marker as UNKNOWN.
       await this.finalizeSend(command, result.externalMessageId);
@@ -1255,6 +1382,7 @@ export class PersonalWorker implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.sessions.disconnectAll();
+    await this.telegram?.stop();
     await Promise.allSettled([...this.tasks]);
     if (wasRunning)
       await this.db

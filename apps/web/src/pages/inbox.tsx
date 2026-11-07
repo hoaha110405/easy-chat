@@ -1,3 +1,4 @@
+import { WhatsAppTemplates } from '@/features/inbox/whatsapp-templates';
 import {
   useState,
   useRef,
@@ -35,6 +36,7 @@ import {
   useConversation,
   useInboxAccounts,
 } from '@/features/inbox/queries';
+import { useInboxRead } from '@/features/inbox/use-inbox-read';
 import { AccountFilter } from '@/features/inbox/account-filter';
 import {
   channelDefinitions,
@@ -84,6 +86,9 @@ export function InboxPage() {
   const visibleAccounts = (accounts.data?.accounts ?? []).filter(
     (item) => !channelType || item.channelType === channelType,
   );
+  const unreadTotal = visibleAccounts
+    .filter((item) => !account || item.key === account)
+    .reduce((sum, item) => sum + (item.unreadMessageCount ?? 0), 0);
   const selected = items.find((item) => item.id === conversationId);
   const suffix = searchParams.toString() ? `?${searchParams.toString()}` : '';
   const total =
@@ -221,7 +226,18 @@ export function InboxPage() {
         >
           <div className="border-b px-4 py-3">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Trò chuyện</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold">Trò chuyện</h2>
+                {unreadTotal > 0 ? (
+                  <span
+                    aria-label={`Tổng ${unreadTotal} tin chưa đọc`}
+                    title="Tin chưa đọc trong easyChat, theo tài khoản và kênh đang chọn"
+                    className="rounded-full bg-teal-50 px-2 py-1 text-[10px] font-semibold tabular-nums text-teal-800"
+                  >
+                    {unreadTotal} chưa đọc
+                  </span>
+                ) : null}
+              </div>
               <span
                 className="text-[10px] tabular-nums text-slate-500"
                 title="Số hội thoại đã tải"
@@ -296,6 +312,7 @@ export function InboxPage() {
                 }
                 className={cn(
                   'mb-1 flex w-full gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors hover:bg-slate-50',
+                  (conversation.inboxUnreadCount ?? 0) > 0 && 'bg-teal-50/40',
                   conversationId === conversation.id &&
                     'border-teal-100 bg-teal-50/70 hover:bg-teal-50/70',
                 )}
@@ -309,6 +326,12 @@ export function InboxPage() {
                     label={`Ảnh người liên hệ ${conversation.customerName ?? conversation.externalUserId}`}
                     className="size-11 ring-2 ring-white"
                   />
+                  {(conversation.inboxUnreadCount ?? 0) > 0 ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -left-0.5 -top-0.5 size-3 rounded-full border-2 border-white bg-primary"
+                    />
+                  ) : null}
                   <span className="absolute -bottom-1 -right-1 rounded-md border-2 border-white">
                     <ProviderMark
                       provider={
@@ -321,7 +344,14 @@ export function InboxPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="truncate text-sm font-semibold">
+                    <p
+                      className={cn(
+                        'truncate text-sm',
+                        (conversation.inboxUnreadCount ?? 0) > 0
+                          ? 'font-semibold text-slate-950'
+                          : 'font-medium text-slate-700',
+                      )}
+                    >
                       {conversation.customerName ?? conversation.externalUserId}
                     </p>
                     <span className="shrink-0 text-[9px] text-slate-500">
@@ -333,9 +363,29 @@ export function InboxPage() {
                         : ''}
                     </span>
                   </div>
-                  <p className="mt-1.5 truncate text-xs leading-5 text-muted-foreground">
-                    {conversationPreview(conversation.lastMessagePreview)}
-                  </p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <p
+                      className={cn(
+                        'min-w-0 flex-1 truncate text-xs leading-5',
+                        (conversation.inboxUnreadCount ?? 0) > 0
+                          ? 'font-medium text-slate-700'
+                          : 'text-muted-foreground',
+                      )}
+                    >
+                      {conversationPreview(conversation.lastMessagePreview)}
+                    </p>
+                    {(conversation.inboxUnreadCount ?? 0) > 0 ? (
+                      <span
+                        aria-label={`${conversation.inboxUnreadCount} tin chưa đọc`}
+                        title={`${conversation.inboxUnreadCount} tin chưa đọc trong easyChat`}
+                        className="min-w-5 shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-center text-[10px] font-semibold leading-4 tabular-nums text-white"
+                      >
+                        {conversation.inboxUnreadCount! > 99
+                          ? '99+'
+                          : conversation.inboxUnreadCount}
+                      </span>
+                    ) : null}
+                  </div>
                   <div
                     className="mt-1.5 flex items-center gap-1.5"
                     title={`${conversation.accountName ?? 'Tài khoản'} · ${conversation.accountExternalId ?? ''}`}
@@ -497,6 +547,10 @@ function MessageViewer({
     )
   )
     messages.push(optimistic);
+  const read = useInboxRead(id, viewport, messages);
+  const firstUnread = messages.find(
+    (m) => m.inboxUnread && m.direction === 'INCOMING',
+  )?.id;
   const contentKey = messages.map((m) => m.id).join(',');
   useLayoutEffect(() => {
     const el = viewport.current;
@@ -600,6 +654,17 @@ function MessageViewer({
           <Info className="size-[18px]" />
         </button>
       </header>
+      {read.error ? (
+        <p
+          role="status"
+          className="border-b bg-amber-50 px-4 py-2 text-[11px] text-amber-900"
+        >
+          Chưa lưu được trạng thái đã đọc.{' '}
+          <button className="underline" onClick={read.retry}>
+            Thử lại
+          </button>
+        </p>
+      ) : null}
       <div
         ref={viewport}
         role="region"
@@ -675,6 +740,17 @@ function MessageViewer({
                   </span>
                 </div>
               ) : null}
+              {message.id === firstUnread ? (
+                <div
+                  role="separator"
+                  aria-label="Tin nhắn chưa đọc"
+                  className="mb-4 flex items-center gap-3 text-[10px] font-medium text-primary"
+                >
+                  <span className="h-px flex-1 bg-teal-200" />
+                  Tin nhắn chưa đọc
+                  <span className="h-px flex-1 bg-teal-200" />
+                </div>
+              ) : null}
               <MessageBubble
                 message={message}
                 conversationId={id}
@@ -692,10 +768,18 @@ function MessageViewer({
           ))}
         </div>
       </div>
-      {currentConversation &&
-      ['ZALO_PERSONAL', 'FACEBOOK_PAGE'].includes(
-        currentConversation.channelType ?? '',
-      ) ? (
+      {(currentConversation &&
+        [
+          'ZALO_PERSONAL',
+          'FACEBOOK_PAGE',
+          'TIKTOK_BUSINESS',
+          'TIKTOK_SHOP',
+          'TELEGRAM_BOT',
+          'TELEGRAM_PERSONAL',
+          'WHATSAPP_BUSINESS',
+        ].includes(currentConversation.channelType ?? '')) ||
+      (currentConversation?.channelType === 'ZALO_OA' &&
+        currentConversation.mediaSupport?.document) ? (
         <>
           <div className="flex shrink-0 items-center gap-2 border-t bg-white px-4 pt-2">
             <Avatar
@@ -708,8 +792,9 @@ function MessageViewer({
               <span className="font-semibold text-slate-800">
                 {currentConversation.accountName ?? 'Tài khoản'}
               </span>
-              {currentConversation.channelType === 'FACEBOOK_PAGE' &&
-              currentConversation.canSend ? (
+              {['FACEBOOK_PAGE', 'WHATSAPP_BUSINESS'].includes(
+                currentConversation.channelType ?? '',
+              ) && currentConversation.canSend ? (
                 <span
                   className="ml-2 text-[9px] text-muted-foreground"
                   title={
@@ -723,14 +808,28 @@ function MessageViewer({
               ) : null}
             </p>
           </div>
+          {currentConversation.channelType === 'WHATSAPP_BUSINESS' ? (
+            <WhatsAppTemplates
+              key={currentConversation.id}
+              conversation={currentConversation}
+            />
+          ) : null}
           <ConversationComposer
             conversationId={id}
+            channelType={currentConversation.channelType}
+            mediaSupport={currentConversation.mediaSupport}
             canSend={Boolean(currentConversation.canSend)}
             sendBlockedReason={currentConversation.sendBlockedReason}
             source={
-              currentConversation.channelType === 'FACEBOOK_PAGE'
-                ? 'FACEBOOK'
-                : 'PERSONAL'
+              currentConversation.channelType === 'WHATSAPP_BUSINESS'
+                ? 'WHATSAPP'
+                : currentConversation.channelType?.startsWith('TELEGRAM_')
+                  ? 'TELEGRAM'
+                  : currentConversation.channelType?.startsWith('TIKTOK_')
+                    ? 'TIKTOK'
+                    : currentConversation.channelType === 'FACEBOOK_PAGE'
+                      ? 'FACEBOOK'
+                      : 'PERSONAL'
             }
             onOptimistic={setOptimistic}
           />
@@ -771,12 +870,13 @@ function MessageBubble({
     message.attachments.every((a) => a.type === 'sticker');
   return (
     <article
+      data-inbox-message-id={message.id}
       aria-label={incoming ? 'Tin nhắn đến' : 'Tin nhắn đã gửi'}
       className={cn('flex flex-col items-start', !incoming && 'items-end')}
     >
       <span className="mb-1.5 text-[10px] text-slate-500">
         {incoming
-          ? (conversation?.customerName ?? 'Contact')
+          ? (message.senderName ?? conversation?.customerName ?? 'Contact')
           : (conversation?.accountName ??
             (message.source === 'PERSONAL' ? 'You' : 'Official Account'))}
       </span>
@@ -790,17 +890,25 @@ function MessageBubble({
             'rounded-tl-2xl rounded-tr-sm border-teal-700 bg-primary text-white',
         )}
       >
-        {message.content ? (
+        {message.deletedAt ? (
+          <p className="text-sm italic">Tin nhắn đã bị xóa trên Telegram.</p>
+        ) : message.content ? (
           <p className="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]">
             {message.content}
           </p>
         ) : null}
-        {message.attachments.map((attachment, i) => (
-          <div key={`${i}:${attachment.url ?? ''}`} className="mt-2 first:mt-0">
-            <MessageAttachment attachment={attachment} onLoad={onMediaLoad} />
-          </div>
-        ))}
-        {!message.content && message.attachments.length === 0 ? (
+        {!message.deletedAt &&
+          message.attachments.map((attachment, i) => (
+            <div
+              key={`${i}:${attachment.url ?? ''}`}
+              className="mt-2 first:mt-0"
+            >
+              <MessageAttachment attachment={attachment} onLoad={onMediaLoad} />
+            </div>
+          ))}
+        {!message.deletedAt &&
+        !message.content &&
+        message.attachments.length === 0 ? (
           <p className="text-sm italic">
             {message.type === 'unsupported'
               ? 'Tin nhắn này chưa có dữ liệu để hiển thị.'
@@ -819,8 +927,12 @@ function MessageBubble({
           }).format(new Date(message.sentAt))}
         </time>
         {message.source === 'HISTORY' ? ' · Imported history' : ''}
+        {message.editedAt && !message.deletedAt ? ' · Đã chỉnh sửa' : ''}
       </p>
-      {!incoming && message.source === 'PERSONAL' ? (
+      {!incoming &&
+      ['PERSONAL', 'FACEBOOK', 'TIKTOK', 'TELEGRAM', 'WHATSAPP'].includes(
+        message.source ?? '',
+      ) ? (
         <DeliveryState message={message} conversationId={conversationId} />
       ) : null}
     </article>

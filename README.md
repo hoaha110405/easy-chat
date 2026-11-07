@@ -83,6 +83,10 @@ For production, run API and one personal worker as separate processes. Serve `ap
 
 ## PostgreSQL and migrations
 
+Docker Compose uses the stable project name `easy-chat`. When moving an existing checkout, keep its previous database by setting `COMPOSE_PROJECT_NAME` to the previous project name in a private root `.env` file. For example, a database created under `demo-new-projects` uses `COMPOSE_PROJECT_NAME=demo-new-projects` and volume `demo-new-projects_postgres_data`. This root setting controls Compose only; backend credentials stay in `apps/api/.env`.
+
+If the worker reports `WORKER_SCHEMA_MISSING` after renaming a folder, inspect `docker compose config` and the selected volume before running migrations. A healthy new PostgreSQL container can still point to an empty database. Existing volumes are retained; do not use `docker compose down -v` to troubleshoot startup. Other safe startup diagnostics distinguish database availability, authentication, configuration and an already-running worker without printing credentials.
+
 The initial migration is committed under `apps/api/prisma/migrations/20261105000000_init`. `pnpm db:deploy` applies committed migrations without modifying them. To change the schema during development:
 
 ```bash
@@ -94,7 +98,7 @@ The Compose volume retains records across restarts. `docker compose down` stops 
 
 ## Environment configuration
 
-Backend variables are read from `apps/api/.env` or the API process environment. See [.env.example](apps/api/.env.example). Root `.env.example` is a reference; the root `.env` is not loaded by the applications.
+Backend variables are read from `apps/api/.env` or the API process environment. See [.env.example](apps/api/.env.example). Root `.env.example` is a reference; the root `.env` is not loaded by the applications, but Docker Compose reads `COMPOSE_PROJECT_NAME` there.
 
 | Variable               | Purpose                                                                 |
 | ---------------------- | ----------------------------------------------------------------------- |
@@ -249,4 +253,25 @@ Create that database once; skip `createdb` if it already exists. The suite appli
 | Prisma cache permission error in a sandbox           | Use a writable `XDG_CACHE_HOME` for Prisma commands; this is an environment restriction, not a database migration error.                                                                                                                                                                                                                                                                                                        |
 
 Live OAuth authorization, webhook delivery, and permission approval require your own Zalo application/OA and were not exercised against a real account. Local tests verify protocol handling and persistence, not approval or account eligibility. Mocked browser checks cover desktop/mobile Facebook setup and the unified inbox alongside existing Zalo layouts. These and React tests/builds do not establish live provider delivery. Facebook Page configuration, supported capabilities, new endpoints and manual Meta verification are documented in [Facebook setup](docs/facebook-page-setup.md).
+
 # easy-chat
+
+## TikTok Business và TikTok Shop
+
+Hai kênh TikTok chính thức dùng chung inbox/outbox/worker với Zalo và Facebook. Mở **Ứng dụng → TikTok Business** hoặc **TikTok Shop**; chưa có app/approval thì trang hiển thị chưa cấu hình, không tạo kết nối giả. Hướng dẫn biến môi trường, quyền, Developer Console, callback/webhook, REST API và nghiệm thu live: [TikTok setup](docs/tiktok-setup.md). Nguồn hợp đồng API và phiên bản: [TikTok API research](docs/tiktok-api-research.md). Kết quả kiểm thử: [TikTok validation](docs/tiktok-validation.md).
+
+## Tin chưa đọc trong easyChat
+
+Hội thoại có tin đến chưa xem được đánh dấu kèm số lượng; phần đầu danh sách và menu tài khoản có tổng theo bộ lọc. Trạng thái được lưu trong PostgreSQL. Chỉ những tin hiện trong vùng chat ở tab/cửa sổ đang hoạt động mới được đánh dấu đã đọc; tin mới đến và phần lịch sử chưa xem vẫn giữ số đếm. Đây là trạng thái riêng của easyChat, không gửi read receipt về nhà cung cấp. Tin đã lưu trước migration giữ mốc ban đầu đã đọc vì trước đó chưa có dữ liệu theo dõi; tin đến được lưu mới bắt đầu được đếm. Xem [chi tiết trạng thái chưa đọc](docs/inbox-unread.md).
+
+## Telegram Bot và Telegram cá nhân
+
+Kết nối qua Bot API HTTPS và TDLib native chính thức, dùng chung inbox/outbox/worker/SSE. Hướng dẫn cấu hình API ID/API Hash, Bot Token, build Linux/Docker và các giới hạn: [docs/telegram-setup.md](docs/telegram-setup.md). [Nguồn chính thức và hợp đồng](docs/telegram-api-research.md), [báo cáo kiểm chứng](docs/telegram-validation.md).
+
+## WhatsApp Business Cloud API
+
+WhatsApp Business dùng Meta Cloud API chính thức, chung inbox/outbox/worker/SSE, hỗ trợ nhiều WABA/số điện thoại, cửa sổ 24 giờ, approved templates, gửi/nhận tài liệu và âm thanh, cùng media proxy có xác thực. [Thiết lập Meta/Embedded Signup](docs/whatsapp-setup.md), [hợp đồng API](docs/whatsapp-api-research.md), [báo cáo kiểm chứng](docs/whatsapp-validation.md).
+
+### Tài liệu và âm thanh đa kênh
+
+Trong Inbox, nút **Tài liệu / Âm thanh** dùng chung cho Zalo cá nhân, Facebook Page, Telegram Bot/cá nhân và WhatsApp; Zalo OA có gửi tài liệu với giới hạn riêng. Các loại không được API hỗ trợ được gắn lý do và khóa đúng nút. Xem [khả năng từng kênh, lưu trữ và kiểm thử](docs/media-attachments.md).

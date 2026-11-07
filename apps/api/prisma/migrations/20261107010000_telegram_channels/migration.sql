@@ -1,0 +1,3 @@
+ALTER TYPE "MessageSource" ADD VALUE 'TELEGRAM';
+ALTER TABLE "Message" ADD COLUMN "editedAt" TIMESTAMP(3), ADD COLUMN "deletedAt" TIMESTAMP(3);
+ALTER TABLE "ChannelAccount" ADD COLUMN "rateLimitedUntil" TIMESTAMP(3);

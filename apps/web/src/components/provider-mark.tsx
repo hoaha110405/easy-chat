@@ -1,4 +1,12 @@
-import { Camera, Mail, MessageCircle, Zap } from 'lucide-react';
+import {
+  Camera,
+  Mail,
+  MessageCircle,
+  Zap,
+  Music2,
+  ShoppingBag,
+  SendHorizontal,
+} from 'lucide-react';
 import { providers, type ProviderId } from '@/lib/channels';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +42,14 @@ export function ProviderMark({
         >
           {small ? 'Z' : 'Zalo'}
         </span>
+      ) : provider === 'whatsapp' ? (
+        <MessageCircle className={small ? 'size-3.5' : 'size-6'} />
+      ) : provider === 'telegram' ? (
+        <SendHorizontal className={small ? 'size-3.5' : 'size-6'} />
+      ) : provider === 'tiktok-business' ? (
+        <Music2 className={small ? 'size-3.5' : 'size-6'} />
+      ) : provider === 'tiktok-shop' ? (
+        <ShoppingBag className={small ? 'size-3.5' : 'size-6'} />
       ) : provider === 'instagram' ? (
         <Camera className={small ? 'size-3.5' : 'size-6'} />
       ) : provider === 'email' ? (

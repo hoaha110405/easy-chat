@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import { WhatsAppCleanup } from '../whatsapp/whatsapp.service';
+import { TelegramCleanup } from '../telegram/telegram.service';
+import { Injectable, Optional } from '@nestjs/common';
 import type { ChannelAccount, Prisma } from '@prisma/client';
 import type { SendText } from '@zalo/shared';
 import { PrismaService } from '../../database/prisma.service';
@@ -7,6 +11,8 @@ import { CryptoService } from '../../common/crypto.service';
 import { ApiError } from '../../common/api-error';
 import { publishEvent } from '../realtime/publish';
 import { serializeMessage } from '../inbox/inbox.service';
+import { capabilitiesSchema, noCapabilities } from '../tiktok/tiktok.types';
+import { assertTikTokBudget } from '../tiktok/tiktok.worker';
 import { assertChannelSend } from '../messaging/channel-policy';
 import { personalWorkerOnline } from './personal-runtime';
 export { WORKER_ID } from './personal-runtime';
@@ -16,6 +22,8 @@ export class PersonalService {
     private readonly db: PrismaService,
     private readonly config: ConfigService,
     private readonly crypto: CryptoService,
+    @Optional() private readonly telegram?: TelegramCleanup,
+    @Optional() private readonly whatsapp?: WhatsAppCleanup,
   ) {}
   private enabled() {
     if (!this.config.env.ZALO_PERSONAL_ENABLED)
@@ -82,6 +90,15 @@ export class PersonalService {
             : 'CHANNEL_WORKER_UNAVAILABLE'
           : account.lastError,
       workerOnline,
+      ...(account.channelType.startsWith('TIKTOK_') ||
+      account.channelType.startsWith('TELEGRAM_')
+        ? {
+            capabilities: capabilitiesSchema
+              .catch(noCapabilities)
+              .parse(account.capabilities),
+            tokenExpiresAt: account.tokenExpiresAt?.toISOString() ?? null,
+          }
+        : {}),
     };
   }
   async list(ownerId: string) {
@@ -175,58 +192,68 @@ export class PersonalService {
     return this.publicAccount(account, online);
   }
   async disconnect(id: string, ownerId: string, cancelOnly = false) {
-    const account = await this.db.$transaction(async (tx) => {
-      const current = await this.owned(id, ownerId, tx, true);
-      if (
-        cancelOnly &&
-        !['QR_PENDING', 'CONNECTING'].includes(current.connectionStatus)
-      )
-        return current;
-      const updated = await tx.channelAccount.update({
-        where: { id },
-        data: {
-          generation: { increment: 1 },
-          connectionStatus: 'DISCONNECTED',
-          encryptedCredentials: null,
-          encryptedQr: null,
-          qrExpiresAt: null,
-          qrStatus: 'CANCELLED',
-          lastError: null,
-        },
-      });
-      await tx.personalCommand.updateMany({
-        where: {
+    const account = await this.db.$transaction(
+      async (tx) => {
+        const current = await this.owned(id, ownerId, tx, true);
+        if (
+          cancelOnly &&
+          !['QR_PENDING', 'CONNECTING'].includes(current.connectionStatus)
+        )
+          return current;
+        const cleanupError =
+          this.whatsapp && current.channelType === 'WHATSAPP_BUSINESS'
+            ? await this.whatsapp.disconnect(current, tx)
+            : this.telegram && current.channelType.startsWith('TELEGRAM_')
+              ? await this.telegram.disconnect(current)
+              : null;
+        const updated = await tx.channelAccount.update({
+          where: { id },
+          data: {
+            generation: { increment: 1 },
+            connectionStatus: 'DISCONNECTED',
+            encryptedCredentials: null,
+            capabilities: {},
+            encryptedQr: null,
+            qrExpiresAt: null,
+            qrStatus: 'CANCELLED',
+            lastError: cleanupError,
+          },
+        });
+        await tx.personalCommand.updateMany({
+          where: {
+            channelAccountId: id,
+            status: { in: ['PENDING', 'PROCESSING'] },
+          },
+          data: { status: 'FAILED' },
+        });
+        await tx.message.updateMany({
+          where: { channelAccountId: id, deliveryStatus: 'PENDING' },
+          data: {
+            deliveryStatus: 'FAILED',
+            deliveryError:
+              current.channelType === 'ZALO_PERSONAL'
+                ? 'ZALO_NOT_CONNECTED'
+                : 'CHANNEL_NOT_CONNECTED',
+          },
+        });
+        await tx.message.updateMany({
+          where: { channelAccountId: id, deliveryStatus: 'SENDING' },
+          data: {
+            deliveryStatus: 'UNKNOWN',
+            deliveryError:
+              current.channelType === 'ZALO_PERSONAL'
+                ? 'ZALO_SEND_UNKNOWN'
+                : 'MESSAGE_SEND_UNKNOWN',
+          },
+        });
+        await publishEvent(tx, ownerId, {
+          type: 'channel.disconnected',
           channelAccountId: id,
-          status: { in: ['PENDING', 'PROCESSING'] },
-        },
-        data: { status: 'FAILED' },
-      });
-      await tx.message.updateMany({
-        where: { channelAccountId: id, deliveryStatus: 'PENDING' },
-        data: {
-          deliveryStatus: 'FAILED',
-          deliveryError:
-            current.channelType === 'ZALO_PERSONAL'
-              ? 'ZALO_NOT_CONNECTED'
-              : 'CHANNEL_NOT_CONNECTED',
-        },
-      });
-      await tx.message.updateMany({
-        where: { channelAccountId: id, deliveryStatus: 'SENDING' },
-        data: {
-          deliveryStatus: 'UNKNOWN',
-          deliveryError:
-            current.channelType === 'ZALO_PERSONAL'
-              ? 'ZALO_SEND_UNKNOWN'
-              : 'MESSAGE_SEND_UNKNOWN',
-        },
-      });
-      await publishEvent(tx, ownerId, {
-        type: 'channel.disconnected',
-        channelAccountId: id,
-      });
-      return updated;
-    });
+        });
+        return updated;
+      },
+      { timeout: 20000 },
+    );
     return {
       disconnected: true,
       ...this.publicAccount(account, await this.workerOnline()),
@@ -249,6 +276,12 @@ export class PersonalService {
         tx,
         true,
       );
+      if (account.channelType === 'ZALO_OA')
+        throw new ApiError(
+          409,
+          'MEDIA_ONLY_CHANNEL',
+          'Zalo OA hiện hỗ trợ gửi tài liệu qua nút đính kèm.',
+        );
       const existing = await tx.message.findUnique({
         where: {
           channelAccountId_idempotencyKey: {
@@ -260,7 +293,19 @@ export class PersonalService {
       if (existing) {
         if (
           existing.conversationId !== conversationId ||
-          existing.content !== input.content
+          existing.content !== input.content ||
+          (account.channelType === 'WHATSAPP_BUSINESS' &&
+            existing.type !== 'text') ||
+          (account.channelType === 'WHATSAPP_BUSINESS' &&
+            z
+              .object({
+                whatsapp: z
+                  .object({ replyToMessageId: z.string().optional() })
+                  .optional(),
+              })
+              .catch({})
+              .parse(existing.metadata).whatsapp?.replyToMessageId !==
+              input.replyToMessageId)
         )
           throw new ApiError(
             409,
@@ -270,6 +315,12 @@ export class PersonalService {
         return serializeMessage(existing);
       }
       if (account.channelType === 'ZALO_PERSONAL') this.enabled();
+      await assertTikTokBudget(
+        tx,
+        account,
+        conversation.id,
+        conversation.lastInboundAt,
+      );
       if (account.channelType !== 'ZALO_PERSONAL')
         assertChannelSend(account, conversation, await this.workerOnline(tx));
       if (
@@ -297,6 +348,35 @@ export class PersonalService {
           'This account already has 20 queued messages. Wait for delivery before sending more.',
         );
       }
+      let replyMetadata: Prisma.InputJsonObject = {};
+      if (input.replyToMessageId) {
+        if (account.channelType !== 'WHATSAPP_BUSINESS')
+          throw new ApiError(
+            400,
+            'REPLY_CONTEXT_UNSUPPORTED',
+            'Kênh này chưa hỗ trợ trích dẫn tin nhắn.',
+          );
+        const reply = await tx.message.findFirst({
+          where: {
+            id: input.replyToMessageId,
+            conversationId,
+            channelAccountId: account.id,
+            externalMessageId: { not: null },
+          },
+        });
+        if (!reply)
+          throw new ApiError(
+            404,
+            'MESSAGE_NOT_FOUND',
+            'Không tìm thấy tin nhắn được trả lời.',
+          );
+        replyMetadata = {
+          whatsapp: {
+            replyTo: reply.externalMessageId,
+            replyToMessageId: reply.id,
+          },
+        };
+      }
       const message = await tx.message.create({
         data: {
           conversationId,
@@ -305,9 +385,17 @@ export class PersonalService {
           direction: 'OUTGOING',
           type: 'text',
           content: input.content,
-          metadata: {},
+          metadata: replyMetadata,
           source:
-            account.channelType === 'FACEBOOK_PAGE' ? 'FACEBOOK' : 'PERSONAL',
+            account.channelType === 'WHATSAPP_BUSINESS'
+              ? 'WHATSAPP'
+              : account.channelType.startsWith('TELEGRAM_')
+                ? 'TELEGRAM'
+                : account.channelType.startsWith('TIKTOK_')
+                  ? 'TIKTOK'
+                  : account.channelType === 'FACEBOOK_PAGE'
+                    ? 'FACEBOOK'
+                    : 'PERSONAL',
           deliveryStatus: 'PENDING',
           idempotencyKey: input.idempotencyKey,
           sentAt: new Date(),
@@ -347,12 +435,27 @@ export class PersonalService {
   async retry(conversationId: string, messageId: string, ownerId: string) {
     return this.db.$transaction(async (tx) => {
       const message = await tx.message.findFirst({
-        where: { id: messageId, conversationId, channelAccount: { ownerId } },
+        where: {
+          id: messageId,
+          conversationId,
+          OR: [
+            { channelAccount: { ownerId } },
+            ...(ownerId === 'administrator'
+              ? [
+                  {
+                    connectionId: { not: null },
+                    outboundCommand: { isNot: null },
+                  },
+                ]
+              : []),
+          ],
+        },
+        include: { outboundCommand: { select: { channelAccountId: true } } },
       });
-      if (!message?.channelAccountId)
+      if (!message || (!message.channelAccountId && !message.outboundCommand))
         throw new ApiError(404, 'MESSAGE_NOT_FOUND', 'Message not found.');
       const account = await this.owned(
-        message.channelAccountId,
+        message.channelAccountId ?? message.outboundCommand!.channelAccountId,
         ownerId,
         tx,
         true,
@@ -380,8 +483,20 @@ export class PersonalService {
             : 'CHANNEL_NOT_CONNECTED',
           'Reconnect the account before retrying.',
         );
-      if (account.channelType !== 'ZALO_PERSONAL')
+      if (
+        account.channelType !== 'ZALO_PERSONAL' &&
+        !(
+          account.channelType === 'WHATSAPP_BUSINESS' &&
+          message.type === 'template'
+        )
+      )
         assertChannelSend(account, conversation, await this.workerOnline(tx));
+      await assertTikTokBudget(
+        tx,
+        account,
+        conversationId,
+        conversation.lastInboundAt,
+      );
       const changed = await tx.message.updateMany({
         where: { id: messageId, deliveryStatus: 'FAILED' },
         data: {
@@ -389,6 +504,33 @@ export class PersonalService {
           deliveryError: null,
           sendAttempts: 0,
           sendingAt: null,
+          ...(account.channelType === 'WHATSAPP_BUSINESS'
+            ? {
+                externalMessageId: null,
+                deliveredAt: null,
+                readAt: null,
+                metadata: (() => {
+                  const metadata = z
+                    .record(z.unknown())
+                    .catch({})
+                    .parse(message.metadata);
+                  const wa = z
+                    .record(z.unknown())
+                    .catch({})
+                    .parse(metadata.whatsapp);
+                  return {
+                    ...metadata,
+                    whatsapp: {
+                      ...wa,
+                      previousMessageId: message.externalMessageId,
+                      providerStatus: null,
+                      statusTimestamp: 0,
+                      callbackData: `${message.id}.${randomUUID()}`,
+                    },
+                  } as Prisma.InputJsonObject;
+                })(),
+              }
+            : {}),
         },
       });
       if (changed.count)

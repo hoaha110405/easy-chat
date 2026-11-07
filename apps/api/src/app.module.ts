@@ -1,3 +1,7 @@
+import { MediaModule } from './modules/media/media.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { TelegramModule } from './modules/telegram/telegram.module';
+import { TikTokModule } from './modules/tiktok/tiktok.module';
 import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CoreModule } from './common/core.module';
@@ -12,6 +16,10 @@ import { FacebookPersonalModule } from './modules/facebook-personal/facebook-per
   imports: [
     CoreModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 5 }]),
+    WhatsAppModule,
+    MediaModule,
+    TelegramModule,
+    TikTokModule,
     FacebookPageModule,
     FacebookPersonalModule,
     ZaloModule,

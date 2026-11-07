@@ -13,10 +13,12 @@ import type {
   InboxAccount,
 } from '@zalo/shared';
 import { z } from 'zod';
+import { channelMediaSupport } from '@zalo/shared';
 import { channelSendPolicy } from '../messaging/channel-policy';
 import { PrismaService } from '../../database/prisma.service';
 import { personalWorkerOnline } from '../zalo-personal/personal-runtime';
 import { ADMIN_OWNER_ID } from '../auth/auth.service';
+import { publishEvent } from '../realtime/publish';
 import { ApiError } from '../../common/api-error';
 const attachmentsSchema = z
   .object({
@@ -30,6 +32,7 @@ const attachmentsSchema = z
                 url: z.string().optional(),
                 name: z.string().optional(),
                 previewUrl: z.string().optional(),
+                local: z.boolean().optional(),
               })
               .passthrough(),
           })
@@ -38,14 +41,23 @@ const attachmentsSchema = z
       .optional(),
   })
   .passthrough();
+const unreadWhere = { inboxUnread: true, direction: 'INCOMING' as const };
 const accountSelect = {
   channelType: true,
+  capabilities: true,
+  rateLimitedUntil: true,
+  tokenExpiresAt: true,
   name: true,
   avatarUrl: true,
   externalAccountId: true,
   connectionStatus: true,
 } as const;
-const connectionSelect = { oaName: true, avatarUrl: true, oaId: true } as const;
+const connectionSelect = {
+  oaName: true,
+  avatarUrl: true,
+  oaId: true,
+  status: true,
+} as const;
 export function serializeMessage(message: Message): InboxMessage {
   const parsed = attachmentsSchema.safeParse(message.metadata);
   return {
@@ -53,20 +65,49 @@ export function serializeMessage(message: Message): InboxMessage {
     externalMessageId: message.externalMessageId,
     deliveryStatus: message.deliveryStatus,
     deliveryError: message.deliveryError,
+    providerStatus:
+      message.source === 'WHATSAPP'
+        ? (z
+            .object({
+              whatsapp: z.object({
+                providerStatus: z
+                  .enum(['sent', 'delivered', 'read', 'failed'])
+                  .optional(),
+              }),
+            })
+            .safeParse(message.metadata).data?.whatsapp.providerStatus ?? null)
+        : null,
     idempotencyKey: message.idempotencyKey,
     direction: message.direction,
+    inboxUnread: message.inboxUnread,
     type: message.type,
     content: message.content,
     sentAt: message.sentAt.toISOString(),
     source: message.source,
     deliveredAt: message.deliveredAt?.toISOString() ?? null,
     readAt: message.readAt?.toISOString() ?? null,
+    editedAt: message.editedAt?.toISOString() ?? null,
+    deletedAt: message.deletedAt?.toISOString() ?? null,
+    senderName:
+      z
+        .object({
+          telegram: z.object({ senderName: z.string().nullable().optional() }),
+        })
+        .safeParse(message.metadata).data?.telegram.senderName ?? null,
     attachments: parsed.success
       ? (parsed.data.attachments ?? []).map((a) => ({
           type: a.type,
           url: a.payload.url ?? null,
           name: a.payload.name ?? null,
           previewUrl: a.payload.previewUrl ?? null,
+          ...(a.payload.local || message.source === 'TELEGRAM'
+            ? { authenticatedPath: `/messages/${message.id}/media` }
+            : {}),
+          ...(message.source === 'WHATSAPP'
+            ? {
+                authenticatedPath: `/channels/whatsapp/messages/${message.id}/media`,
+              }
+            : {}),
         }))
       : [],
   };
@@ -95,11 +136,13 @@ export class InboxService {
   async accounts(ownerId = ADMIN_OWNER_ID) {
     const [personal, oa, online] = await Promise.all([
       this.db.channelAccount.findMany({
-        where: { ownerId },
+        where: { ownerId, channelType: { not: 'ZALO_OA' } },
         select: {
           id: true,
           ...accountSelect,
-          _count: { select: { conversations: true } },
+          _count: {
+            select: { conversations: true, messages: { where: unreadWhere } },
+          },
         },
         orderBy: { createdAt: 'asc' },
       }),
@@ -109,7 +152,9 @@ export class InboxService {
           id: true,
           ...connectionSelect,
           status: true,
-          _count: { select: { conversations: true } },
+          _count: {
+            select: { conversations: true, messages: { where: unreadWhere } },
+          },
         },
         orderBy: { createdAt: 'asc' },
       }),
@@ -117,7 +162,7 @@ export class InboxService {
     ]);
     const accounts: InboxAccount[] = [
       ...personal.map((a) => ({
-        key: `${a.channelType === 'FACEBOOK_PAGE' ? 'facebook-page' : a.channelType === 'FACEBOOK_PERSONAL' ? 'facebook-personal' : 'personal'}:${a.id}`,
+        key: `${a.channelType === 'ZALO_PERSONAL' ? 'personal' : a.channelType.toLowerCase().replace('_', '-')}:${a.id}`,
         id: a.id,
         channelType: a.channelType as InboxAccount['channelType'],
         name: a.name,
@@ -128,6 +173,7 @@ export class InboxService {
             ? 'RECONNECTING'
             : a.connectionStatus,
         conversationCount: a._count.conversations,
+        unreadMessageCount: a._count.messages,
       })),
       ...oa.map((a) => ({
         key: `oa:${a.id}`,
@@ -138,6 +184,7 @@ export class InboxService {
         externalAccountId: a.oaId,
         status: a.status,
         conversationCount: a._count.conversations,
+        unreadMessageCount: a._count.messages,
       })),
     ];
     return { accounts };
@@ -161,20 +208,61 @@ export class InboxService {
         | 'externalAccountId'
         | 'connectionStatus'
         | 'channelType'
+        | 'capabilities'
+        | 'rateLimitedUntil'
+        | 'tokenExpiresAt'
       > | null;
-      connection: Pick<ZaloConnection, 'oaName' | 'avatarUrl' | 'oaId'> | null;
+      connection: Pick<
+        ZaloConnection,
+        'oaName' | 'avatarUrl' | 'oaId' | 'status'
+      > | null;
+      _count?: { messages: number };
     },
     online: boolean,
   ) {
     return {
       ...conversation,
+      mediaSupport: {
+        ...channelMediaSupport(
+          conversation.channelAccount?.channelType ?? 'ZALO_OA',
+        ),
+        canSend: conversation.connectionId
+          ? Boolean(
+              conversation.connection?.status === 'CONNECTED' &&
+              online &&
+              conversation.lastInboundAt &&
+              conversation.lastInboundAt.getTime() + 48 * 3600000 > Date.now(),
+            )
+          : Boolean(
+              conversation.channelAccount &&
+              channelSendPolicy(
+                conversation.channelAccount,
+                conversation,
+                online,
+              ).allowed,
+            ),
+      },
+      inboxUnreadCount: conversation._count?.messages ?? 0,
+      _count: undefined,
       channelAccount: undefined,
       connection: undefined,
       channelType: conversation.channelAccount?.channelType ?? 'ZALO_OA',
-      sendBlockedReason: conversation.channelAccount
-        ? channelSendPolicy(conversation.channelAccount, conversation, online)
-            .code
-        : 'Kênh này chỉ hỗ trợ xem lịch sử.',
+      sendBlockedReason: conversation.connectionId
+        ? (channelSendPolicy(
+            {
+              channelType: 'ZALO_OA',
+              connectionStatus:
+                conversation.connection?.status === 'CONNECTED'
+                  ? 'CONNECTED'
+                  : 'DISCONNECTED',
+            },
+            conversation,
+            online,
+          ).code ?? 'ZALO_OA_MEDIA_ONLY')
+        : conversation.channelAccount
+          ? channelSendPolicy(conversation.channelAccount, conversation, online)
+              .code
+          : 'Kênh này chỉ hỗ trợ xem lịch sử.',
       messagingWindowExpiresAt: conversation.channelAccount
         ? (channelSendPolicy(
             conversation.channelAccount,
@@ -194,10 +282,12 @@ export class InboxService {
         conversation.channelAccount?.externalAccountId ??
         conversation.connection?.oaId ??
         null,
-      canSend: conversation.channelAccount
-        ? channelSendPolicy(conversation.channelAccount, conversation, online)
-            .allowed
-        : false,
+      canSend: conversation.connectionId
+        ? false
+        : conversation.channelAccount
+          ? channelSendPolicy(conversation.channelAccount, conversation, online)
+              .allowed
+          : false,
     };
   }
   async conversation(id: string, ownerId = ADMIN_OWNER_ID) {
@@ -206,6 +296,7 @@ export class InboxService {
       include: {
         channelAccount: { select: accountSelect },
         connection: { select: connectionSelect },
+        _count: { select: { messages: { where: unreadWhere } } },
       },
     });
     if (!item)
@@ -242,7 +333,17 @@ export class InboxService {
                     ? 'ZALO_PERSONAL'
                     : prefix === 'facebook-page'
                       ? 'FACEBOOK_PAGE'
-                      : 'FACEBOOK_PERSONAL',
+                      : prefix === 'facebook-personal'
+                        ? 'FACEBOOK_PERSONAL'
+                        : prefix === 'tiktok-business'
+                          ? 'TIKTOK_BUSINESS'
+                          : prefix === 'tiktok-shop'
+                            ? 'TIKTOK_SHOP'
+                            : prefix === 'whatsapp-business'
+                              ? 'WHATSAPP_BUSINESS'
+                              : prefix === 'telegram-bot'
+                                ? 'TELEGRAM_BOT'
+                                : 'TELEGRAM_PERSONAL',
               },
             },
       );
@@ -267,6 +368,7 @@ export class InboxService {
       include: {
         channelAccount: { select: accountSelect },
         connection: { select: connectionSelect },
+        _count: { select: { messages: { where: unreadWhere } } },
       },
       orderBy: [
         { lastMessageAt: { sort: 'desc', nulls: 'last' } },
@@ -288,6 +390,34 @@ export class InboxService {
             )
           : null,
     };
+  }
+  async markRead(id: string, messageIds: string[], ownerId = ADMIN_OWNER_ID) {
+    return this.db.$transaction(async (tx) => {
+      const conversation = await tx.conversation.findFirst({
+        where: { id, ...this.whereOwner(ownerId) },
+        select: { id: true, channelAccountId: true },
+      });
+      if (!conversation)
+        throw new ApiError(
+          404,
+          'CONVERSATION_NOT_FOUND',
+          'Conversation not found.',
+        );
+      // Explicit IDs preserve newer arrivals and messages outside the visible viewport.
+      const result = await tx.message.updateMany({
+        where: { conversationId: id, id: { in: messageIds }, ...unreadWhere },
+        data: { inboxUnread: false },
+      });
+      if (result.count)
+        await publishEvent(tx, ownerId, {
+          type: 'conversation.updated',
+          conversationId: id,
+          ...(conversation.channelAccountId
+            ? { channelAccountId: conversation.channelAccountId }
+            : {}),
+        });
+      return { markedRead: result.count };
+    });
   }
   async messages(
     id: string,

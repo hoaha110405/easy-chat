@@ -10,6 +10,17 @@ export default defineConfig(({ mode }) => {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
     server: {
+      fs: {
+        deny: [
+          '.env',
+          '.env.*',
+          '*.{crt,pem}',
+          '**/.git/**',
+          '**/.local/**',
+          '**/.cache/**',
+          '**/native/telegram/build/**',
+        ],
+      },
       port: 5173,
       strictPort: true,
       allowedHosts: (env.DEV_ALLOWED_HOSTS || '').split(',').filter(Boolean),

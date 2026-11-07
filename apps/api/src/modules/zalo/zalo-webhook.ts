@@ -60,13 +60,15 @@ export function normalizeWebhook(value: unknown): NormalizedMessage {
     userId: outgoing ? event.recipient.id : event.sender.id,
     externalMessageId: event.message.msg_id,
     direction: outgoing ? 'OUTGOING' : 'INCOMING',
-    type,
+    type: type === 'voice' ? 'audio' : type,
     content: event.message.text ?? '',
     sentAt: eventDate(event.timestamp),
     metadata: {
       eventName: event.event_name,
-      attachments: (event.message.attachments ??
-        []) as NormalizedMessage['metadata'][string],
+      attachments: (event.message.attachments ?? []).map((a) => ({
+        ...a,
+        type: a.type === 'voice' ? 'audio' : a.type,
+      })) as NormalizedMessage['metadata'][string],
     },
     source: 'WEBHOOK',
   };

@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Copy, ExternalLink, LockKeyhole, X } from 'lucide-react';
-import type { Conversation, InboxMessage } from '@zalo/shared';
+import {
+  channelSyncResultSchema,
+  type Conversation,
+  type InboxMessage,
+} from '@zalo/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { ErrorNotice } from '@/components/feedback';
 import { Avatar } from '@/components/avatar';
 import { ProviderMark } from '@/components/provider-mark';
 import { channelInfo, sendBlockedMessage } from '@/lib/channels';
-import { cn, formatTime, safeUrl } from '@/lib/utils';
+import { cn, formatTime, safeUrl, attachmentUrl } from '@/lib/utils';
 
 export function ConversationDetails({
   conversation,
@@ -16,17 +24,49 @@ export function ConversationDetails({
   messages: InboxMessage[];
   onClose: () => void;
 }) {
+  const client = useQueryClient();
+  const historySync = useMutation({
+    mutationFn: () =>
+      api(`/conversations/${conversation.id}/sync`, channelSyncResultSchema, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['telegram'] });
+    },
+  });
+  const latestIncoming = [...messages]
+    .filter(
+      (m) => m.direction === 'INCOMING' && m.externalMessageId && !m.deletedAt,
+    )
+    .sort((a, b) => b.sentAt.localeCompare(a.sentAt))[0];
+  const providerRead = useMutation({
+    mutationFn: () =>
+      api(
+        `/conversations/${conversation.id}/whatsapp/read`,
+        channelSyncResultSchema,
+        {
+          method: 'POST',
+          body: JSON.stringify({ messageIds: [latestIncoming!.id] }),
+        },
+      ),
+  });
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const close = useRef<HTMLButtonElement>(null);
   const channel = channelInfo(conversation.channelType);
+  const isTikTok =
+    conversation.channelType?.startsWith('TIKTOK_') ||
+    conversation.channelType?.startsWith('TELEGRAM_');
+  const contactId =
+    conversation.externalContactId ??
+    (isTikTok ? null : conversation.externalUserId);
   const name = conversation.customerName ?? conversation.externalUserId;
   const images = messages
     .flatMap((message) => message.attachments)
     .filter(
       (attachment) =>
         ['image', 'photo', 'gif'].includes(attachment.type) &&
-        safeUrl(attachment.url),
+        attachmentUrl(attachment),
     )
     .slice(-6);
   useEffect(() => {
@@ -40,7 +80,11 @@ export function ConversationDetails({
   async function copy() {
     setCopied(false);
     try {
-      await navigator.clipboard.writeText(conversation.externalUserId);
+      await navigator.clipboard.writeText(
+        contactId ??
+          conversation.externalConversationId ??
+          conversation.externalUserId,
+      );
       setCopied(true);
       setCopyError(false);
     } catch {
@@ -77,11 +121,13 @@ export function ConversationDetails({
       </div>
       <div className="mx-5 border-y py-4">
         <p className="mb-2 text-[10px] font-medium text-slate-500">
-          Mã người liên hệ
+          {contactId ? 'Mã người liên hệ' : 'Mã hội thoại'}
         </p>
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 break-all text-[11px] text-slate-600">
-            {conversation.externalUserId}
+            {contactId ??
+              conversation.externalConversationId ??
+              conversation.externalUserId}
           </code>
           <button
             onClick={() => void copy()}
@@ -100,6 +146,16 @@ export function ConversationDetails({
             {copied
               ? 'Đã sao chép.'
               : 'Chưa thể sao chép. Bạn có thể chọn mã ở trên.'}
+          </p>
+        ) : null}
+      </div>
+      <div className="border-b px-5 py-4 text-xs text-slate-600">
+        <p>{conversation.inboxUnreadCount ?? 0} tin chưa đọc trong easyChat</p>
+        {conversation.unreadCount !== undefined &&
+        conversation.unreadCount !== null ? (
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            {conversation.unreadCount} tin chưa đọc trên {channel.label}. Số này
+            do ứng dụng cung cấp.
           </p>
         ) : null}
       </div>
@@ -141,6 +197,11 @@ export function ConversationDetails({
                     'ZALO_PERSONAL',
                     'FACEBOOK_PAGE',
                     'FACEBOOK_PERSONAL',
+                    'TIKTOK_BUSINESS',
+                    'TIKTOK_SHOP',
+                    'TELEGRAM_BOT',
+                    'TELEGRAM_PERSONAL',
+                    'WHATSAPP_BUSINESS',
                   ].includes(conversation.channelType ?? '')
                 ? sendBlockedMessage(conversation.sendBlockedReason)
                 : 'Kênh chỉ xem hội thoại'}
@@ -154,6 +215,56 @@ export function ConversationDetails({
           <ExternalLink className="size-3" />
         </Link>
       </div>
+      {conversation.channelType === 'WHATSAPP_BUSINESS' ? (
+        <div className="border-t px-5 py-4">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!latestIncoming || providerRead.isPending}
+            onClick={() => providerRead.mutate()}
+          >
+            Báo đã đọc trên WhatsApp
+          </Button>
+          <p className="mt-2 text-[10px] leading-5 text-muted-foreground">
+            Gửi xác nhận đọc cho tin nhận gần nhất đang tải. Trạng thái đã đọc
+            trong easyChat được quản lý riêng.
+          </p>
+          {providerRead.isSuccess ? (
+            <p role="status" className="mt-2 text-xs text-primary">
+              Đã xếp lịch báo đọc trên WhatsApp.
+            </p>
+          ) : null}
+          {providerRead.error ? (
+            <ErrorNotice error={providerRead.error} />
+          ) : null}
+        </div>
+      ) : null}
+      {conversation.channelType === 'TELEGRAM_PERSONAL' ? (
+        <div className="border-t px-5 py-4">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={historySync.isPending}
+            onClick={() => historySync.mutate()}
+          >
+            Đồng bộ lịch sử Telegram
+          </Button>
+          <p className="mt-2 text-[10px] leading-5 text-muted-foreground">
+            Tiếp tục tải phần lịch sử Telegram có thể truy cập. Tin đã đọc trong
+            easyChat giữ nguyên trạng thái.
+          </p>
+          {historySync.isSuccess ? (
+            <p role="status" className="mt-2 text-xs text-primary">
+              Đã xếp lịch đồng bộ hội thoại.
+            </p>
+          ) : null}
+          {historySync.error ? (
+            <div className="mt-2">
+              <ErrorNotice error={historySync.error} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="border-t px-5 py-5">
         <h4 className="text-xs font-semibold">Ảnh trong tin nhắn đã tải</h4>
         {images.length ? (
@@ -161,14 +272,14 @@ export function ConversationDetails({
             {images.map((image, i) => (
               <a
                 key={`${image.url}:${i}`}
-                href={safeUrl(image.url)}
+                href={attachmentUrl(image)}
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Mở ảnh gốc"
                 className="aspect-square overflow-hidden rounded-lg bg-slate-50"
               >
                 <img
-                  src={safeUrl(image.previewUrl) ?? safeUrl(image.url)}
+                  src={safeUrl(image.previewUrl) ?? attachmentUrl(image)}
                   alt="Ảnh trong hội thoại"
                   className="size-full object-cover"
                   referrerPolicy="no-referrer"

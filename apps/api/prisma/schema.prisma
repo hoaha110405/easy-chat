@@ -23,6 +23,9 @@ enum MessageSource {
   HISTORY
   PERSONAL
   FACEBOOK
+  TIKTOK
+  TELEGRAM
+  WHATSAPP
 }
 
 enum EventStatus {
@@ -55,6 +58,9 @@ model Conversation {
   externalUserId         String
   customerName           String?
   customerAvatar         String?
+  externalContactId      String?
+  unreadCount            Int?
+  providerState          Json            @default("{}")
   externalConversationId String?
   lastInboundAt          DateTime?
   lastSyncAt             DateTime?
@@ -94,9 +100,13 @@ model Message {
   sentAt            DateTime
   deliveredAt       DateTime?
   readAt            DateTime?
+  editedAt          DateTime?
+  deletedAt         DateTime?
+  inboxUnread       Boolean          @default(false)
   createdAt         DateTime         @default(now())
   conversation      Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   channelAccount    ChannelAccount?  @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  media             MessageMedia?
   outboundCommand   PersonalCommand?
   connection        ZaloConnection?  @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
@@ -105,11 +115,14 @@ model Message {
   @@unique([channelAccountId, idempotencyKey])
   @@index([conversationId, sentAt, id])
   @@index([channelAccountId, deliveryStatus])
+  @@index([conversationId, inboxUnread])
+  @@index([channelAccountId, inboxUnread])
+  @@index([connectionId, inboxUnread])
 }
 
 // Durable browser sessions also hold short-lived, single-use OAuth state and PKCE.
 model AdminSession {
-  id                         String    @id
+  id                         String                 @id
   expiresAt                  DateTime
   oauthStateHash             String?
   encryptedVerifier          String?
@@ -118,6 +131,7 @@ model AdminSession {
   facebookStateExpiresAt     DateTime?
   encryptedFacebookSelection String?
   facebookSelectionExpiresAt DateTime?
+  channelAuthorizations      ChannelAuthorization[]
 
   @@index([expiresAt])
 }
@@ -138,6 +152,7 @@ model WebhookEvent {
   processedAt      DateTime?
 
   @@index([status, receivedAt])
+  @@index([channelAccountId, eventName])
 }
 
 enum PersonalConnectionStatus {
@@ -149,9 +164,12 @@ enum PersonalConnectionStatus {
   REAUTH_REQUIRED
   ERROR
   UNSUPPORTED
+  PERMISSION_REQUIRED
 }
 
 enum DeliveryStatus {
+  DELIVERED
+  READ
   PENDING
   SENDING
   SENT
@@ -187,12 +205,17 @@ model ChannelAccount {
   qrExpiresAt          DateTime?
   generation           Int                      @default(0)
   lastConnectedAt      DateTime?
+  rateLimitedUntil     DateTime?
   lastSendAt           DateTime?
   lastError            String?
   lastSyncAt           DateTime?
   lastSyncError        String?
   syncCursor           String?
   syncComplete         Boolean                  @default(false)
+  capabilities         Json                     @default("{}")
+  providerMetadata     Json                     @default("{}")
+  tokenExpiresAt       DateTime?
+  refreshExpiresAt     DateTime?
   createdAt            DateTime                 @default(now())
   updatedAt            DateTime                 @updatedAt
   conversations        Conversation[]
@@ -231,4 +254,37 @@ model PersonalWorkerState {
   id          String   @id
   instanceId  String
   heartbeatAt DateTime
+}
+
+// Short-lived, session-bound authorization for independent provider OAuth flows.
+model ChannelAuthorization {
+  id                 String       @id @default(cuid())
+  sessionId          String
+  session            AdminSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  ownerId            String
+  channelType        String
+  stateHash          String       @unique
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  encryptedSelection String?
+  createdAt          DateTime     @default(now())
+
+  @@index([sessionId, channelType, expiresAt])
+}
+
+
+// Private, bounded media for the durable outbox and Telegram download cache.
+model MessageMedia {
+  id             String   @id @default(cuid())
+  messageId      String   @unique
+  message        Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  name           String
+  mime           String
+  size           Int
+  sha256         String
+  encryptedBytes Bytes
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([expiresAt])
 }

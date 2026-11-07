@@ -162,6 +162,62 @@ export class ZaloApiClient {
       }
     }
   }
+  uploadFile(
+    connectionId: string,
+    file: { bytes: Buffer; mime: string; name: string },
+  ) {
+    const form = new FormData();
+    form.set(
+      'file',
+      new Blob([new Uint8Array(file.bytes)], { type: file.mime }),
+      file.name,
+    );
+    return this.authorized(connectionId, (token) =>
+      this.http.request(
+        {
+          method: 'POST',
+          url: `${OPEN_API}/v2.0/oa/upload/file`,
+          headers: { access_token: token },
+          data: form,
+          maxBodyLength: 5_000_000 + 65536,
+        },
+        z.object({ data: z.object({ token: z.string().min(1).max(4096) }) }),
+      ),
+    ).then((v) => v.data.token);
+  }
+  sendFile(connectionId: string, userId: string, fileToken: string) {
+    if (!/^\d{1,30}$/.test(userId))
+      throw new ApiError(400, 'INVALID_RECIPIENT', 'Người nhận không hợp lệ.');
+    return this.authorized(connectionId, (token) =>
+      this.http.request(
+        {
+          method: 'POST',
+          url: `${OPEN_API}/v3.0/oa/message/cs`,
+          headers: { access_token: token, 'Content-Type': 'application/json' },
+          data: {
+            recipient: { user_id: userId },
+            message: {
+              attachment: { type: 'file', payload: { token: fileToken } },
+            },
+          },
+        },
+        z.object({
+          data: z.object({
+            message_id: z.string().min(1).max(512),
+            user_id: z.string().optional(),
+          }),
+        }),
+      ),
+    ).then((v) => {
+      if (v.data.user_id && v.data.user_id !== userId)
+        throw new ApiError(
+          502,
+          'ZALO_INVALID_RESPONSE',
+          'Zalo trả kết quả người nhận không khớp.',
+        );
+      return v.data;
+    });
+  }
   getProfile(connectionId: string) {
     return this.authorized(connectionId, (token) =>
       this.profileWithToken(token),

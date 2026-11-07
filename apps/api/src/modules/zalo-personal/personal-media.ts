@@ -6,7 +6,7 @@ export const mediaUrl = z
   .url()
   .refine((value) => /^https?:\/\//i.test(value));
 export const personalAttachmentSchema = z.object({
-  type: z.enum(['image', 'gif', 'sticker']),
+  type: z.enum(['image', 'gif', 'sticker', 'file', 'audio']),
   payload: z.object({
     url: mediaUrl.optional(),
     previewUrl: mediaUrl.optional(),
@@ -51,7 +51,10 @@ export function normalizePersonalContent(
       'chat.photo': 'image',
       'chat.sticker': 'sticker',
       'chat.gif': 'gif',
-    } as Record<string, 'image' | 'gif' | 'sticker'>
+      'chat.file': 'file',
+      'chat.voice': 'audio',
+      'chat.audio': 'audio',
+    } as Record<string, 'image' | 'gif' | 'sticker' | 'file' | 'audio'>
   )[msgType];
   if (!kind)
     return {
@@ -73,6 +76,12 @@ export function normalizePersonalContent(
           value,
         )
       : firstUrl(
+          params.voiceUrl,
+          params.m4aUrl,
+          item.voiceUrl,
+          item.m4aUrl,
+          params.fileUrl,
+          item.fileUrl,
           params.hdUrl,
           item.hdUrl,
           item.href,
@@ -91,6 +100,16 @@ export function normalizePersonalContent(
     .positive()
     .max(Number.MAX_SAFE_INTEGER)
     .safeParse(item.id ?? item.stickerId ?? item.sticker_id);
+  const name = z
+    .string()
+    .max(500)
+    .safeParse(
+      item.fileName ??
+        item.filename ??
+        item.name ??
+        (kind === 'file' ? item.title : undefined) ??
+        params.fileName,
+    );
   const description = z
     .string()
     .max(10000)
@@ -103,6 +122,7 @@ export function normalizePersonalContent(
         type: kind,
         payload: {
           ...(url ? { url } : {}),
+          ...(name.success ? { name: name.data } : {}),
           ...(previewUrl ? { previewUrl } : {}),
           ...(kind === 'sticker' && stickerId.success
             ? { stickerId: stickerId.data }

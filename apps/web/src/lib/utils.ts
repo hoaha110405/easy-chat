@@ -1,3 +1,4 @@
+import { apiBaseUrl } from '@/lib/api';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 export function cn(...inputs: ClassValue[]) {
@@ -30,4 +31,18 @@ export function formatTime(value: string | null, full = false) {
       ? { dateStyle: 'medium', timeStyle: 'short' }
       : { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' },
   ).format(new Date(value));
+}
+
+export function attachmentUrl(a: {
+  url: string | null;
+  authenticatedPath?: string;
+}) {
+  if (
+    a.authenticatedPath &&
+    /^\/(?:channels\/whatsapp\/)?messages\/[a-z0-9]+\/media$/.test(
+      a.authenticatedPath,
+    )
+  )
+    return apiBaseUrl + a.authenticatedPath;
+  return safeUrl(a.url);
 }

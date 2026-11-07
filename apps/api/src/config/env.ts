@@ -45,6 +45,68 @@ const schema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  TIKTOK_BUSINESS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  TIKTOK_BUSINESS_APP_ID: z.string().default(''),
+  TIKTOK_BUSINESS_APP_SECRET: z.string().default(''),
+  TIKTOK_BUSINESS_AUTHORIZATION_URL: z.string().default(''),
+  TIKTOK_BUSINESS_REDIRECT_URI: z
+    .string()
+    .url()
+    .default(
+      'http://localhost:3000/api/channels/tiktok-business/oauth/callback',
+    ),
+  TIKTOK_SHOP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  TIKTOK_SHOP_APP_KEY: z.string().default(''),
+  TIKTOK_SHOP_APP_SECRET: z.string().default(''),
+  TIKTOK_SHOP_AUTHORIZATION_URL: z.string().default(''),
+  TIKTOK_SHOP_REDIRECT_URI: z
+    .string()
+    .url()
+    .default('http://localhost:3000/api/channels/tiktok-shop/oauth/callback'),
+  WHATSAPP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  WHATSAPP_GRAPH_API_VERSION: z.enum(['v26.0', 'v27.0']).default('v27.0'),
+  WHATSAPP_META_APP_ID: z.string().default(''),
+  WHATSAPP_META_APP_SECRET: z.string().default(''),
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().default(''),
+  WHATSAPP_WEBHOOK_CALLBACK_URL: z.string().default(''),
+  WHATSAPP_EMBEDDED_SIGNUP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: z.string().default(''),
+  TELEGRAM_PERSONAL_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  TELEGRAM_API_ID: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(2147483647)
+    .default(0),
+  TELEGRAM_API_HASH: z.string().default(''),
+  TELEGRAM_BOT_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  TELEGRAM_BOT_WEBHOOK_BASE_URL: z.string().default(''),
+  TELEGRAM_TDLIB_BRIDGE_PATH: z
+    .string()
+    .default('../../native/telegram/build/tdjson-bridge'),
+  TELEGRAM_TDJSON_LIBRARY: z
+    .string()
+    .default('../../.local/tdlib/lib/libtdjson.so'),
+  TELEGRAM_DATA_DIR: z.string().default('../../.local/telegram'),
+  TELEGRAM_RPC_SOCKET: z.string().default('../../.local/telegram/worker.sock'),
   TOKEN_ENCRYPTION_KEY: z
     .string()
     .regex(/^[a-fA-F0-9]{64}$/, 'Use a 32-byte hex encryption key'),
@@ -65,7 +127,11 @@ export function parseEnvironment(value: NodeJS.ProcessEnv): Environment {
       (Boolean(env.ZALO_APP_ID && env.ZALO_APP_SECRET) &&
         !env.ZALO_REDIRECT_URI.startsWith('https://')) ||
       (Boolean(env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET) &&
-        !env.FACEBOOK_OAUTH_REDIRECT_URI.startsWith('https://')))
+        !env.FACEBOOK_OAUTH_REDIRECT_URI.startsWith('https://')) ||
+      (Boolean(env.TIKTOK_BUSINESS_APP_ID && env.TIKTOK_BUSINESS_APP_SECRET) &&
+        !env.TIKTOK_BUSINESS_REDIRECT_URI.startsWith('https://')) ||
+      (Boolean(env.TIKTOK_SHOP_APP_KEY && env.TIKTOK_SHOP_APP_SECRET) &&
+        !env.TIKTOK_SHOP_REDIRECT_URI.startsWith('https://')))
   )
     throw new Error(
       'Production frontend and configured channel callback URLs must use HTTPS',

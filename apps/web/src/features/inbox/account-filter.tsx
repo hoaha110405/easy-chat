@@ -196,8 +196,13 @@ export function AccountFilter({
                     {account.externalAccountId ?? 'Chưa đăng nhập'}
                   </span>
                 </span>
-                <span className="text-xs tabular-nums text-slate-500">
-                  {account.conversationCount}
+                <span className="shrink-0 text-right text-xs tabular-nums text-slate-500">
+                  <span title="Số hội thoại">{account.conversationCount}</span>
+                  {(account.unreadMessageCount ?? 0) > 0 ? (
+                    <span className="mt-1 block text-[9px] font-semibold text-primary">
+                      {account.unreadMessageCount} chưa đọc
+                    </span>
+                  ) : null}
                 </span>
                 {value === account.key ? (
                   <Check className="size-4 shrink-0 text-primary" />

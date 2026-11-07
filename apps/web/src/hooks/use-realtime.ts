@@ -25,6 +25,10 @@ export function useRealtime() {
                 'personal-accounts',
                 'inbox-accounts',
                 'facebook-page',
+                'tiktok',
+                'telegram',
+                'whatsapp',
+                'whatsapp-templates',
                 'facebook-personal',
               ].includes(String(query.queryKey[0])),
           });

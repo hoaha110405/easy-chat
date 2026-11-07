@@ -1,0 +1,11 @@
+.git
+.cache
+.local
+**/node_modules
+**/dist
+**/dist-worker
+**/.turbo
+native/telegram/build
+.env
+**/.env
+**/.env.*

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FileText, ImageOff, Sticker } from 'lucide-react';
 import type { InboxMessage } from '@zalo/shared';
-import { cn, safeUrl } from '@/lib/utils';
+import { cn, safeUrl, attachmentUrl } from '@/lib/utils';
 
 export function MessageAttachment({
   attachment,
@@ -10,7 +10,7 @@ export function MessageAttachment({
   attachment: InboxMessage['attachments'][number];
   onLoad?: () => void;
 }) {
-  const url = safeUrl(attachment.url);
+  const url = attachmentUrl(attachment);
   const preview = safeUrl(attachment.previewUrl);
   const [failed, setFailed] = useState<string[]>([]);
   const sticker = attachment.type === 'sticker';
@@ -73,6 +73,57 @@ export function MessageAttachment({
       </div>
     );
   }
+  if (src && ['audio', 'video'].includes(attachment.type))
+    return (
+      <div className="max-w-full">
+        {attachment.type === 'audio' ? (
+          <audio
+            aria-label={attachment.name ?? 'Âm thanh'}
+            controls
+            src={src}
+            preload="none"
+            onError={() => setFailed((values) => [...values, src])}
+          />
+        ) : (
+          <video
+            aria-label={attachment.name ?? 'Video'}
+            controls
+            src={src}
+            className="max-h-80 max-w-full rounded-lg"
+            preload="metadata"
+            onLoadedData={onLoad}
+            onError={() => setFailed((values) => [...values, src])}
+          />
+        )}
+        <a
+          className="mt-1 inline-block text-xs underline"
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Mở tệp gốc
+        </a>
+      </div>
+    );
+  if (url && ['audio', 'video'].includes(attachment.type))
+    return (
+      <div className="space-y-2 text-xs">
+        <p role="status">
+          Chưa phát được {attachment.type === 'audio' ? 'âm thanh' : 'video'}.
+          Tệp có thể đang tải hoặc trình duyệt chưa hỗ trợ định dạng này.
+        </p>
+        <button
+          type="button"
+          onClick={() => setFailed([])}
+          className="mr-3 underline"
+        >
+          Thử tải lại
+        </button>
+        <a href={url} target="_blank" rel="noreferrer" className="underline">
+          Tải tệp gốc
+        </a>
+      </div>
+    );
   return url ? (
     <a
       href={url}

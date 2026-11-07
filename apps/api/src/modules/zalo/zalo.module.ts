@@ -1,3 +1,4 @@
+import { ZaloOaMediaWorker } from './zalo-oa-media.worker';
 import { Module } from '@nestjs/common';
 import { ZaloHttpService } from './zalo-http.service';
 import { ZaloApiClient } from './zalo-api.client';
@@ -11,6 +12,7 @@ import { InboxModule } from '../inbox/inbox.module';
 @Module({
   imports: [InboxModule],
   providers: [
+    ZaloOaMediaWorker,
     ZaloHttpService,
     ZaloApiClient,
     ZaloOAuthService,
@@ -19,6 +21,6 @@ import { InboxModule } from '../inbox/inbox.module';
     ZaloHistoryService,
   ],
   controllers: [ZaloController, ZaloWebhookController],
-  exports: [ZaloApiClient, ZaloHistoryService],
+  exports: [ZaloApiClient, ZaloHistoryService, ZaloOaMediaWorker],
 })
 export class ZaloModule {}
